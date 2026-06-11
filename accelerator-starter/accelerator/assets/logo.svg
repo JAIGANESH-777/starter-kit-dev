@@ -1,0 +1,9 @@
+<svg width="180" height="40" viewBox="0 0 180 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Accelerator Logo">
+  <rect x="2" y="6" width="28" height="28" rx="8" stroke="currentColor" stroke-width="3"/>
+  <path d="M10 26L16 14L22 26" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M42 28V12H48L56 22L64 12H70V28H65V18L56 27L47 18V28H42Z" fill="currentColor"/>
+  <path d="M77 28V12H90C95 12 98 15 98 19C98 23 95 26 90 26H82V28H77ZM82 22H89C91.5 22 93 21 93 19C93 17 91.5 16 89 16H82V22Z" fill="currentColor"/>
+  <path d="M103 28V12H108V24H122V28H103Z" fill="currentColor"/>
+  <path d="M126 28V12H131V28H126Z" fill="currentColor"/>
+  <path d="M136 28V12H142L154 22V12H159V28H153L141 18V28H136Z" fill="currentColor"/>
+</svg>

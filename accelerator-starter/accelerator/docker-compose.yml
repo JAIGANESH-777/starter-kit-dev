@@ -1,0 +1,105 @@
+# version: '3.9'
+
+# services:
+#   db:
+#     image: postgres:16-alpine
+#     container_name: app_database
+#     ports:
+#       - '5432:5432'
+#     environment:
+#       POSTGRES_DB: my_app
+#       POSTGRES_USER: postgres
+#       POSTGRES_PASSWORD: postgres
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U postgres -d my_app"]
+#       interval: 5s
+#       timeout: 5s
+#       retries: 5
+
+#   backend:
+#     build:
+#       context: ./backend    # Looks inside your newly generated active backend folder
+#     container_name: active_backend
+#     volumes:
+#       - ./backend:/app
+#     ports:
+#       - '8000:8000'
+#     environment:
+#       - ENV=local
+#       - SECRET_KEY=django-insecure-default-development-key
+#       - DATABASE_URL=postgres://postgres:postgres@db:5432/my_app
+#       - ALLOWED_ORIGINS=http://localhost:3000
+#     depends_on:
+#       db:
+#         condition: service_healthy
+
+#   frontend:
+#     build:
+#       context: ./frontend   # Looks inside your newly generated active frontend folder
+#     container_name: active_frontend
+#     volumes:
+#       - ./frontend:/app
+#       - /app/node_modules
+#     ports:
+#       - '3000:3000'
+#     environment:
+#       # We provide all common framework variables at once. 
+#       # Whichever framework is active will grab the one it needs!
+#       - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+#       - PUBLIC_API_URL=http://localhost:8000
+#       - VITE_API_URL=http://localhost:8000
+#     depends_on:
+#       - backend
+
+
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: app_database
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_DB: my_app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d my_app"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend    # Looks inside your newly generated active backend folder
+    container_name: active_backend
+    volumes:
+      - ./backend:/app
+    ports:
+      - '8000:8000'
+    environment:
+      - ENV=local
+      - BACKEND_SECRET=accelerator-insecure-default-development-key
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/my_app
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend   # Looks inside your newly generated active frontend folder
+    container_name: active_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - '3000:3000'
+    environment:
+      # W-1 FIXED: Added trailing api/ router scope pathways explicitly
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+      - PUBLIC_API_URL=http://localhost:8000/api
+      - VITE_API_URL=http://localhost:8000/api
+    depends_on:
+      - backend
