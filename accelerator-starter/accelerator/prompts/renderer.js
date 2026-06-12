@@ -1240,6 +1240,7 @@ export function renderSpec(answers) {
     buildDatabase(answers),
     buildAuth(answers),
     buildInfra(answers),
+    buildDockerCompose(answers),
     buildQuality(answers),
     buildDirectoryTree(answers),
     buildScaffoldInstructions(answers),

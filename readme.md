@@ -80,9 +80,9 @@ Answer the interactive prompt series. The compiler will gather inputs on:
 The compiler outputs a custom, AI-readable `SPEC.md` directly into the current directory.
 
 ### 2. Instruct Your AI Agent
-Copy the generated `SPEC.md`, `shared_tokens.md`, `CLAUDE.md`, and the custom `agents/skills/` guidelines into your target directory. Then, hand over instructions to your AI coding agent (e.g., Claude Code, Cursor, or Codex) with a prompt like:
+Copy the generated `SPEC.md`, `shared_tokens.md`, `CLAUDE.md`, `ACCELERATOR_SPEC.md`, and the custom `agents/skills/` guidelines into your target directory. Then, hand over instructions to your AI coding agent (e.g., Claude Code, Cursor, or Codex) with a prompt like:
 
-> *"Read CLAUDE.md, SPEC.md, and shared_tokens.md completely. Reference the agents/skills/ directory. Bootstrap the backend/ and frontend/ folders in this project directory following the exact scaffold pipeline in SPEC.md."*
+> *"Read CLAUDE.md, SPEC.md, ACCELERATOR_SPEC.md, and shared_tokens.md completely. Reference the agents/skills/ directory. Bootstrap the backend/ and frontend/ folders in this project directory following the exact scaffold pipeline in SPEC.md."*
 
 ### 3. Let the Agent Scaffold & Validate
 The agent will build out the vertical slices step-by-step. The process follows strict guidelines to ensure quality, security, and consistent styling.
