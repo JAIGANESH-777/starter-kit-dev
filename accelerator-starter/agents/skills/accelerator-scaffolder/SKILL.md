@@ -44,4 +44,4 @@ Before writing any code, examine the current configurations:
   - Frontend: must `EXPOSE 3000`.
   - Backend: must `EXPOSE 8000`.
 - Generate Terraform deployment templates matching the chosen target cloud (AWS, Azure, GCP).
-- Do not modify the root `docker-compose.yml` file; utilize its environment configurations.
+- Generate the root `docker-compose.yml` by copying and applying the dynamically compiled Docker service configurations from Section 6 of `SPEC.md`. Ensure all port mappings, dependent services (db, redis, keycloak), and healthchecks match the specification exactly.

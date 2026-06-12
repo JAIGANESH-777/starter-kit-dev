@@ -94,13 +94,112 @@ function buildBackend({ backend }) {
   const extrasBlock = backend.backendExtras.length > 0
     ? `\n### Features Enabled\n${bullet(backend.backendExtras)}\n` : '';
 
-  const structureHint = backend.framework === 'NestJS'
-    ? 'backend/src/{module}/{module}.controller.ts, .service.ts, .module.ts'
-    : backend.framework === 'Django'
-    ? 'backend/apps/{app}/views.py, models.py, serializers.py, urls.py'
-    : backend.framework === 'FastAPI'
-    ? 'backend/app/routers/{resource}.py, schemas/{resource}.py, models/{resource}.py'
-    : 'backend/src/routes/{resource}.ts, controllers/{resource}.ts, services/{resource}.ts';
+  // FIX: Framework-specific module pattern — must match Section 9 directory tree exactly.
+  // NestJS uses module-based architecture; Express/Fastify/Hono use routes-based architecture.
+  const isNestJS   = backend.framework === 'NestJS';
+  const isDjango   = backend.framework === 'Django';
+  const isFastAPI  = backend.framework === 'FastAPI';
+
+  const modulePatternHint = isNestJS
+    ? `backend/src/{module}/{module}.controller.ts\nbackend/src/{module}/{module}.service.ts\nbackend/src/{module}/{module}.module.ts\nbackend/src/common/          # shared guards, filters, interceptors, pipes\nbackend/src/config/          # environment config module`
+    : isDjango
+    ? `backend/apps/{app}/views.py\nbackend/apps/{app}/models.py\nbackend/apps/{app}/serializers.py\nbackend/apps/{app}/urls.py`
+    : isFastAPI
+    ? `backend/app/routers/{resource}.py\nbackend/app/schemas/{resource}.py\nbackend/app/models/{resource}.py\nbackend/app/core/             # config, security, dependencies`
+    : `backend/src/routes/{resource}.ts    # route registration\nbackend/src/controllers/{resource}.ts # request/response handling\nbackend/src/services/{resource}.ts    # business logic\nbackend/src/middleware/              # shared middleware (auth, error, logging)\nbackend/src/config/                  # environment config`;
+
+  // FIX: Emit env vars for selected backend extras — not just list them as bullets.
+  const extraEnvLines = new Set();
+  if (backend.backendExtras.includes('Redis Caching') || backend.backendExtras.includes('Background Queues')) {
+    extraEnvLines.add('REDIS_URL=redis://localhost:6379/0');
+  }
+  if (backend.backendExtras.includes('Email Service')) {
+    extraEnvLines.add('SMTP_HOST=smtp.example.com');
+    extraEnvLines.add('SMTP_PORT=587');
+    extraEnvLines.add('SMTP_USER=');
+    extraEnvLines.add('SMTP_PASS=');
+    extraEnvLines.add('EMAIL_FROM=noreply@example.com');
+  }
+  if (backend.backendExtras.includes('File Uploads')) {
+    extraEnvLines.add('AWS_S3_BUCKET=');
+    extraEnvLines.add('AWS_ACCESS_KEY_ID=');
+    extraEnvLines.add('AWS_SECRET_ACCESS_KEY=');
+    extraEnvLines.add('AWS_REGION=us-east-1');
+  }
+  if (backend.backendExtras.includes('WebSockets')) {
+    extraEnvLines.add('WS_PORT=8001');
+  }
+  const extraEnvVars = extraEnvLines.size > 0 ? '\n' + [...extraEnvLines].join('\n') : '';
+
+  // Build per-extra integration scaffold instructions — agents must implement these, not just install packages.
+  const extrasInstructionLines = [];
+  if (backend.backendExtras.includes('Redis Caching')) {
+    extrasInstructionLines.push('#### Redis Caching');
+    if (isNestJS) {
+      extrasInstructionLines.push('- Install: `@nestjs/cache-manager cache-manager ioredis`');
+      extrasInstructionLines.push('- Create `src/cache/cache.module.ts` — register `CacheModule.registerAsync()` configured from `REDIS_URL`.');
+      extrasInstructionLines.push('- Import `CacheModule` (global: true) in `app.module.ts`.');
+    } else {
+      extrasInstructionLines.push('- Install: `ioredis`');
+      extrasInstructionLines.push('- Create `src/lib/redis.ts` — export a singleton `ioredis` client initialized from `REDIS_URL`.');
+      extrasInstructionLines.push('- Import in services that need caching.');
+    }
+  }
+  if (backend.backendExtras.includes('Background Queues')) {
+    extrasInstructionLines.push('#### Background Queues (BullMQ)');
+    if (isNestJS) {
+      extrasInstructionLines.push('- Install: `@nestjs/bullmq bullmq`');
+      extrasInstructionLines.push('- Create `src/queues/queues.module.ts` — register `BullModule.forRootAsync()` using `REDIS_URL`.');
+      extrasInstructionLines.push("- Create `src/queues/example.processor.ts` with `@Processor('example')` decorator and at least one `@Process()` handler.");
+      extrasInstructionLines.push('- Import `QueuesModule` in `app.module.ts`.');
+    } else {
+      extrasInstructionLines.push('- Install: `bullmq`');
+      extrasInstructionLines.push('- Create `src/queues/worker.ts` — initialize a `Worker` from `bullmq` using `REDIS_URL`.');
+      extrasInstructionLines.push('- Create `src/queues/producer.ts` — export a `Queue` instance for enqueueing jobs.');
+    }
+  }
+  if (backend.backendExtras.includes('WebSockets')) {
+    extrasInstructionLines.push('#### WebSockets');
+    if (isNestJS) {
+      extrasInstructionLines.push('- Install: `@nestjs/websockets @nestjs/platform-socket.io socket.io`');
+      extrasInstructionLines.push('- Create `src/gateway/app.gateway.ts` decorated with `@WebSocketGateway({ cors: true })`.');
+      extrasInstructionLines.push('- Implement `afterInit`, `handleConnection`, `handleDisconnect` lifecycle hooks and at least one `@SubscribeMessage()` handler.');
+      extrasInstructionLines.push('- Register the gateway in `src/gateway/gateway.module.ts` and import in `app.module.ts`.');
+    } else {
+      extrasInstructionLines.push('- Install: `socket.io`');
+      extrasInstructionLines.push('- Create `src/gateway/socket.ts` — attach a Socket.IO server to the HTTP server instance and export the `io` object.');
+      extrasInstructionLines.push('- Import `io` in route handlers to emit events as needed.');
+    }
+  }
+  if (backend.backendExtras.includes('Email Service')) {
+    extrasInstructionLines.push('#### Email Service (Nodemailer)');
+    extrasInstructionLines.push('- Install: `nodemailer @types/nodemailer`');
+    if (isNestJS) {
+      extrasInstructionLines.push('- Create `src/mail/mail.module.ts` and `src/mail/mail.service.ts`.');
+      extrasInstructionLines.push('- Configure Nodemailer transporter in `MailService` using `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.');
+      extrasInstructionLines.push('- Export `MailModule` globally and import in `app.module.ts`.');
+    } else {
+      extrasInstructionLines.push('- Create `src/lib/mailer.ts` — export a configured Nodemailer transporter using `SMTP_*` env vars.');
+      extrasInstructionLines.push('- Call `transporter.sendMail()` from service functions that need to send emails.');
+    }
+  }
+  if (backend.backendExtras.includes('File Uploads')) {
+    extrasInstructionLines.push('#### File Uploads (AWS S3)');
+    extrasInstructionLines.push('- Install: `@aws-sdk/client-s3 @aws-sdk/s3-request-presigner multer @types/multer`');
+    if (isNestJS) {
+      extrasInstructionLines.push('- Create `src/uploads/uploads.module.ts` and `uploads.service.ts`.');
+      extrasInstructionLines.push('- Use `FileInterceptor` from `@nestjs/platform-express` on upload controller endpoints.');
+      extrasInstructionLines.push('- S3 client configured from `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.');
+      extrasInstructionLines.push('- Generate presigned URLs for downloads via `getSignedUrl` from `@aws-sdk/s3-request-presigner`.');
+    } else {
+      extrasInstructionLines.push('- Create `src/lib/s3.ts` — export an S3 client configured from `AWS_*` env vars.');
+      extrasInstructionLines.push('- Add `multer` middleware in `src/routes/uploads.ts` for multipart form parsing.');
+      extrasInstructionLines.push('- Upload buffer with `PutObjectCommand`; generate presigned URLs with `getSignedUrl`.');
+    }
+  }
+  const extrasInstructionsBlock = extrasInstructionLines.length > 0
+    ? `\n### Feature Integration Instructions\n> These features must be **wired up with actual code**, not just installed as packages.\n${extrasInstructionLines.join('\n')}\n`
+    : '';
 
   return [
     '## 3. Backend',
@@ -117,16 +216,15 @@ function buildBackend({ backend }) {
     '# backend/.env',
     'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/appdb',
     'JWT_SECRET=change-me-in-production',
-    'PORT=8000',
+    `PORT=8000${extraEnvVars}`,
     '```',
     '',
     '### Module Pattern',
     '```',
-    structureHint,
-    'backend/src/common/          # shared guards, filters, interceptors, pipes',
-    'backend/src/config/          # environment config module',
+    modulePatternHint,
     '```',
     '',
+    extrasInstructionsBlock,
     '### Health Endpoint (L-2 Rule)',
     '- Route: `GET /api/health` → `{ status: "ok" }` with HTTP 200',
     '- **Verify this returns 200 before writing a single frontend component.**',
@@ -139,10 +237,10 @@ function buildBackend({ backend }) {
 function buildDatabase({ database }) {
   if (!database.hasDatabase) return '## 4. Database\n_No database included._\n\n---\n\n';
 
-  const hasSQLite = database.databases.includes('SQLite');
+  const hasSQLite  = database.databases.includes('SQLite');
   const hasPostgres = database.databases.some((d) =>
     ['PostgreSQL', 'MySQL', 'PlanetScale', 'Supabase'].includes(d));
-  const hasMongo = database.databases.includes('MongoDB');
+  const hasMongo   = database.databases.includes('MongoDB');
 
   let connFix = '- Use the standard connection URL format for your database driver.';
   if (database.orm === 'Prisma')
@@ -188,7 +286,7 @@ function buildDatabase({ database }) {
     connFix,
     hasSQLite ? '- **SQLite**: use `file:./dev.db` (dev) or `file:/app/db/local.db` (Docker). Skip the Postgres container.' : '',
     hasPostgres ? '- In Docker, the DB host is the service name (e.g. `db`), not `localhost`.' : '',
-    hasMongo ? '- MongoDB URI: `mongodb://user:pass@db:27017/dbname` inside Docker.' : '',
+    hasMongo ? '- MongoDB URI: `mongodb://user:pass@mongo:27017/dbname` inside Docker.' : '',
     '',
     '### Migration Commands',
     `- Run: ${migrationCmd}`,
@@ -222,8 +320,66 @@ function buildAuth({ auth, projectType }) {
     auth.authMethods.includes('GitHub OAuth') ? 'GITHUB_CLIENT_ID=\nGITHUB_CLIENT_SECRET=' : '',
   ].filter(Boolean).join('\n');
 
+  // FIX: Provider-specific env vars — only emit vars for the chosen auth provider.
+  // Previously always emitted NEXTAUTH_SECRET even for Keycloak/Clerk/Cognito projects.
+  const providerVars = (() => {
+    switch (auth.authProvider) {
+      case 'Auth.js':
+        return '# frontend/.env.local\nNEXTAUTH_SECRET=change-me-in-production\nNEXTAUTH_URL=http://localhost:3000';
+      case 'Passport.js':
+        return '# Passport.js uses JWT_SECRET above. No additional provider vars required.';
+      case 'Clerk':
+        return '# frontend/.env.local\nCLERK_SECRET_KEY=change-me-in-production\nNEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_change-me';
+      case 'Supabase Auth':
+        return '# backend/.env or frontend/.env.local\nSUPABASE_URL=https://your-project.supabase.co\nSUPABASE_ANON_KEY=change-me-in-production\nSUPABASE_SERVICE_ROLE_KEY=change-me-in-production';
+      case 'AWS Cognito':
+        return '# backend/.env\nAWS_COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX\nAWS_COGNITO_CLIENT_ID=change-me-in-production\nAWS_REGION=us-east-1';
+      case 'Keycloak':
+        return '# backend/.env\nKEYCLOAK_SERVER_URL=http://keycloak:8080\nKEYCLOAK_REALM=my-realm\nKEYCLOAK_CLIENT_ID=backend-api\nKEYCLOAK_CLIENT_SECRET=change-me-in-production';
+      case 'Custom FastAPI Jose/Passlib':
+      case 'Django Auth':
+      case 'Authlib':
+      case 'Custom':
+        return '# No additional provider env vars — handled by JWT_SECRET above.';
+      default:
+        return '';
+    }
+  })();
+
   const rolesBlock = auth.hasRBAC && auth.roles.length > 0
     ? `\n### Roles (RBAC)\nDefine and enforce these roles via guards/middleware:\n${bullet(auth.roles)}\n` : '';
+
+  // Per-method frontend UI requirements — agents must implement a distinct UI for each, not just email+password.
+  const authUIRules = auth.authMethods.map((method) => {
+    switch (method) {
+      case 'Email + Password':
+        return '- **Email + Password**: email input + password input + submit button. Include a "Forgot password?" link.';
+      case 'Magic Link':
+        return '- **Magic Link**: single email input + "Send Magic Link" button only. On submit, replace form with: "Check your inbox for a sign-in link." No password field.';
+      case 'OTP / SMS':
+        return '- **OTP / SMS**: two-step form — Step 1: phone number input + "Send Code" button. Step 2: 6-digit numeric code input (`<input pattern="[0-9]{6}" maxlength="6">`) + "Verify" button.';
+      case 'Google OAuth':
+        return '- **Google OAuth**: "Continue with Google" branded button with Google logo. Redirects to `/api/auth/google`; handles callback at `/api/auth/google/callback`.';
+      case 'GitHub OAuth':
+        return '- **GitHub OAuth**: "Continue with GitHub" branded button with GitHub logo. Redirects to `/api/auth/github`.';
+      case 'Azure AD OAuth':
+        return '- **Azure AD OAuth**: "Sign in with Microsoft" branded button. Use MSAL or provider redirect flow.';
+      default:
+        return `- **${method}**: implement the appropriate UI form and backend handler for this auth method.`;
+    }
+  });
+  const authUIBlock = authUIRules.length > 0
+    ? `\n### Frontend Auth UI Requirements\n> Implement **every** selected auth method with its own distinct UI. Do not default to email+password for all methods.\n${authUIRules.join('\n')}\n`
+    : '';
+
+  // Multi-tenant interceptor global registration rule
+  const multiTenantRegistrationBlock = auth.hasMultiTenant
+    ? '\n### Multi-Tenant Interceptor Registration (mandatory)\n' +
+      '- **NestJS**: add `{ provide: APP_INTERCEPTOR, useClass: TenantInterceptor }` to the `providers` array in `app.module.ts`. Import `APP_INTERCEPTOR` from `@nestjs/core`.\n' +
+      '- **Express / Fastify / Hono**: register `tenantMiddleware` **before** all route handlers in `server.ts` — `app.use(tenantMiddleware)`.\n' +
+      '- Apply `@CurrentTenant()` decorator in every controller or resolver that queries tenant-scoped data.\n' +
+      '- Every DB query touching tenant data **must** be scoped to `tenantId`. A query without a tenant scope is a critical security bug.\n'
+    : '';
 
   return [
     '## 5. Authentication & Authorization',
@@ -245,9 +401,7 @@ function buildAuth({ auth, projectType }) {
     'JWT_SECRET=change-me-in-production',
     'JWT_EXPIRES_IN=7d',
     oauthVars,
-    '# frontend/.env.local',
-    'NEXTAUTH_SECRET=change-me-in-production',
-    'NEXTAUTH_URL=http://localhost:3000',
+    providerVars,
     '```',
     '',
     '### Implementation Rules',
@@ -255,13 +409,223 @@ function buildAuth({ auth, projectType }) {
     '- Store tokens in HTTP-only cookies — never in localStorage.',
     '- Refresh tokens must be rotated on every use.',
     auth.hasMultiTenant ? '- Multi-tenant: scope every DB query to the resolved `tenantId`. Cross-tenant access is a critical security bug.' : '',
+    authUIBlock,
+    multiTenantRegistrationBlock,
     rolesBlock,
     '---',
     '',
   ].filter((l) => l !== false).join('\n');
 }
 
-function buildInfra({ infra }) {
+// ── Dynamic docker-compose generator ─────────────────────────────────────────
+// FIX: Generates a concrete, service-accurate docker-compose.yml template inside the SPEC
+// based on exactly what the user selected. The AI agent copies this verbatim to the project root.
+
+function buildDockerCompose({ frontend, backend, database, auth, infra }) {
+  if (!infra.hasDocker) return '';
+
+  const hasPostgres = database.hasDatabase &&
+    database.databases.some((d) => ['PostgreSQL', 'PlanetScale', 'Supabase'].includes(d));
+  const hasMySQL = database.hasDatabase && database.databases.includes('MySQL');
+  const hasMongo = database.hasDatabase && database.databases.includes('MongoDB');
+  const hasRedis = (database.hasDatabase && database.databases.includes('Redis')) ||
+    (backend.hasBackend && (
+      backend.backendExtras.includes('Redis Caching') ||
+      backend.backendExtras.includes('Background Queues')
+    ));
+  const hasKeycloak = auth.hasAuth && auth.authProvider === 'Keycloak';
+
+  const apiUrlVar = !frontend.hasFrontend ? null
+    : frontend.framework.includes('Vite') ? 'VITE_API_URL'
+    : frontend.framework.includes('Nuxt') ? 'NUXT_PUBLIC_API_URL'
+    : frontend.framework.includes('Svelte') ? 'PUBLIC_API_URL'
+    : 'NEXT_PUBLIC_API_URL';
+
+  const L = [];
+
+  L.push('### Docker Compose Template');
+  L.push('');
+  L.push('Place this file at the **project root** as `docker-compose.yml`.');
+  L.push('The agent **must not** modify service names, internal hostnames, or port mappings.');
+  L.push('');
+  L.push('```yaml');
+  L.push("version: '3.9'");
+  L.push('');
+  L.push('services:');
+
+  // ── Database services ──────────────────────────────────────────────────────
+  if (hasPostgres) {
+    L.push('  db:');
+    L.push('    image: postgres:16-alpine');
+    L.push('    container_name: app_database');
+    L.push('    ports:');
+    L.push("      - '5432:5432'");
+    L.push('    environment:');
+    L.push('      POSTGRES_DB: appdb');
+    L.push('      POSTGRES_USER: postgres');
+    L.push('      POSTGRES_PASSWORD: postgres');
+    L.push('    healthcheck:');
+    L.push('      test: ["CMD-SHELL", "pg_isready -U postgres -d appdb"]');
+    L.push('      interval: 5s');
+    L.push('      timeout: 5s');
+    L.push('      retries: 5');
+    L.push('    volumes:');
+    L.push('      - postgres_data:/var/lib/postgresql/data');
+    L.push('');
+  }
+
+  if (hasMySQL) {
+    L.push('  db:');
+    L.push('    image: mysql:8');
+    L.push('    container_name: app_database');
+    L.push('    ports:');
+    L.push("      - '3306:3306'");
+    L.push('    environment:');
+    L.push('      MYSQL_DATABASE: appdb');
+    L.push('      MYSQL_ROOT_PASSWORD: rootpassword');
+    L.push('      MYSQL_USER: appuser');
+    L.push('      MYSQL_PASSWORD: apppassword');
+    L.push('    healthcheck:');
+    L.push('      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]');
+    L.push('      interval: 5s');
+    L.push('      timeout: 5s');
+    L.push('      retries: 5');
+    L.push('    volumes:');
+    L.push('      - mysql_data:/var/lib/mysql');
+    L.push('');
+  }
+
+  if (hasMongo) {
+    L.push('  mongo:');
+    L.push('    image: mongo:7');
+    L.push('    container_name: app_mongo');
+    L.push('    ports:');
+    L.push("      - '27017:27017'");
+    L.push('    environment:');
+    L.push('      MONGO_INITDB_DATABASE: appdb');
+    L.push('    healthcheck:');
+    L.push("      test: [\"CMD\", \"mongosh\", \"--eval\", \"db.adminCommand('ping')\"]");
+    L.push('      interval: 5s');
+    L.push('      timeout: 5s');
+    L.push('      retries: 5');
+    L.push('    volumes:');
+    L.push('      - mongo_data:/data/db');
+    L.push('');
+  }
+
+  // ── Redis service ──────────────────────────────────────────────────────────
+  if (hasRedis) {
+    L.push('  redis:');
+    L.push('    image: redis:7-alpine');
+    L.push('    container_name: app_redis');
+    L.push('    ports:');
+    L.push("      - '6379:6379'");
+    L.push('    healthcheck:');
+    L.push('      test: ["CMD", "redis-cli", "ping"]');
+    L.push('      interval: 5s');
+    L.push('      timeout: 5s');
+    L.push('      retries: 5');
+    L.push('');
+  }
+
+  // ── Keycloak service ───────────────────────────────────────────────────────
+  if (hasKeycloak) {
+    L.push('  keycloak:');
+    L.push('    image: quay.io/keycloak/keycloak:24.0');
+    L.push('    container_name: app_keycloak');
+    L.push('    command: start-dev');
+    L.push('    ports:');
+    L.push("      - '8080:8080'");
+    L.push('    environment:');
+    L.push('      KEYCLOAK_ADMIN: admin');
+    L.push('      KEYCLOAK_ADMIN_PASSWORD: admin');
+    L.push('    healthcheck:');
+    L.push('      test: ["CMD-SHELL", "curl -fs http://localhost:8080/health/ready || exit 1"]');
+    L.push('      interval: 10s');
+    L.push('      timeout: 10s');
+    L.push('      retries: 12');
+    L.push('');
+  }
+
+  // ── Backend service ────────────────────────────────────────────────────────
+  if (backend.hasBackend) {
+    const dependsOn = [
+      (hasPostgres || hasMySQL) && 'db',
+      hasMongo && 'mongo',
+      hasRedis && 'redis',
+      hasKeycloak && 'keycloak',
+    ].filter(Boolean);
+
+    L.push('  backend:');
+    L.push('    build:');
+    L.push('      context: ./backend');
+    L.push('    container_name: app_backend');
+    L.push('    ports:');
+    L.push("      - '8000:8000'");
+    L.push('    environment:');
+    L.push('      - PORT=8000');
+    L.push('      - JWT_SECRET=change-me-in-production');
+    L.push('      - ALLOWED_ORIGINS=http://localhost:3000');
+    if (hasPostgres) L.push('      - DATABASE_URL=postgresql://postgres:postgres@db:5432/appdb');
+    if (hasMySQL)    L.push('      - DATABASE_URL=mysql://appuser:apppassword@db:3306/appdb');
+    if (hasMongo)    L.push('      - MONGODB_URI=mongodb://mongo:27017/appdb');
+    if (hasRedis)    L.push('      - REDIS_URL=redis://redis:6379/0');
+    if (hasKeycloak) {
+      L.push('      - KEYCLOAK_SERVER_URL=http://keycloak:8080');
+      L.push('      - KEYCLOAK_REALM=my-realm');
+      L.push('      - KEYCLOAK_CLIENT_ID=backend-api');
+      L.push('      - KEYCLOAK_CLIENT_SECRET=change-me-in-production');
+    }
+    if (dependsOn.length > 0) {
+      L.push('    depends_on:');
+      dependsOn.forEach((dep) => {
+        L.push(`      ${dep}:`);
+        L.push('        condition: service_healthy');
+      });
+    }
+    L.push('');
+  }
+
+  // ── Frontend service ───────────────────────────────────────────────────────
+  if (frontend.hasFrontend) {
+    L.push('  frontend:');
+    L.push('    build:');
+    L.push('      context: ./frontend');
+    L.push('    container_name: app_frontend');
+    L.push('    ports:');
+    L.push("      - '3000:3000'");
+    L.push('    environment:');
+    L.push(`      - ${apiUrlVar}=http://backend:8000/api`);
+    if (backend.hasBackend) {
+      L.push('    depends_on:');
+      L.push('      - backend');
+    }
+    L.push('');
+  }
+
+  // ── Named volumes ──────────────────────────────────────────────────────────
+  const volumes = [
+    hasPostgres && '  postgres_data:',
+    hasMySQL && '  mysql_data:',
+    hasMongo && '  mongo_data:',
+  ].filter(Boolean);
+
+  if (volumes.length > 0) {
+    L.push('volumes:');
+    L.push(...volumes);
+    L.push('');
+  }
+
+  L.push('```');
+  L.push('');
+  L.push('> **C-1 Rule**: All inter-container hostnames must use Docker service names (`backend`, `db`, `redis`, `mongo`, `keycloak`),');
+  L.push('> never `localhost`. Frontend SSR fetches inside Docker also use service names, not `localhost`.');
+  L.push('');
+
+  return L.join('\n');
+}
+
+function buildInfra({ infra, frontend, backend, database, auth }) {
   const parts = [
     '## 6. Infrastructure & DevOps',
     '',
@@ -283,9 +647,12 @@ function buildInfra({ infra }) {
     parts.push('### Docker Port Rules (C-1 — mandatory)');
     parts.push('- Frontend: `EXPOSE 3000` — process must listen on port 3000');
     parts.push('- Backend: `EXPOSE 8000` — process must listen on port 8000');
-    parts.push('- Use service names (`backend`, `db`) for inter-container communication, never `localhost`');
-    parts.push('- Add `depends_on: { db: { condition: service_healthy } }` to avoid race conditions');
+    parts.push('- Use service names (`backend`, `db`, `redis`) for inter-container communication, never `localhost`');
+    parts.push('- Add `depends_on: { <service>: { condition: service_healthy } }` to avoid race conditions');
     parts.push('');
+
+    // FIX: Embed the fully dynamic compose template, scoped to what was actually selected.
+    parts.push(buildDockerCompose({ frontend, backend, database, auth, infra }));
   }
 
   if (infra.hasCICD && infra.cicdSteps.length > 0) {
@@ -301,7 +668,7 @@ function buildInfra({ infra }) {
     const notes = [
       infra.codeQuality.includes('ESLint') && '- **ESLint**: `eslint.config.mjs` (flat config). Use `@typescript-eslint/recommended` + framework plugin.',
       infra.codeQuality.includes('Prettier') && '- **Prettier**: `.prettierrc` → `{ "singleQuote": true, "semi": true, "printWidth": 100 }`.',
-      infra.codeQuality.includes('Husky') && '- **Husky**: `npx husky init` → add pre-commit hook to run lint-staged.',
+      infra.codeQuality.includes('Husky') && '- **Husky**: `npx husky init` → add `pre-commit` (lint-staged) and `commit-msg` (commitlint) hooks.',
       infra.codeQuality.includes('lint-staged') && '- **lint-staged**: in `package.json` → run ESLint + Prettier on staged `*.ts` / `*.tsx` files.',
       infra.codeQuality.includes('Commitlint') && '- **Commitlint**: `@commitlint/config-conventional` + commit-msg Husky hook.',
       infra.codeQuality.includes('SonarQube') && '- **SonarQube**: `sonar-project.properties` at root. Set `sonar.sources`, `sonar.tests`, coverage exclusions.',
@@ -337,6 +704,30 @@ function buildQuality({ quality }) {
   const coverageBlock = quality.hasCoverage
     ? '\n### Coverage Thresholds\nMinimum 80% for lines, functions, and branches. Fail CI if not met.\n' : '';
 
+  // Cypress-specific setup instructions — do not skip initialization
+  const cypressBlock = quality.testingFramework === 'Cypress'
+    ? '\n### Cypress Setup (mandatory — do not skip)\n' +
+      '- Install: `cypress @testing-library/cypress`\n' +
+      '- Initialize with `npx cypress open` on first run to scaffold the `cypress/` directory structure.\n' +
+      '- Create `cypress.config.ts` at the **project root** with `baseUrl` pointing to the frontend dev server (e.g. `http://localhost:3000`).\n' +
+      '- Place E2E test files under `cypress/e2e/` with `.cy.ts` extension.\n' +
+      '- Add custom commands in `cypress/support/commands.ts`.\n' +
+      '- Add to root `package.json`: `"test:e2e": "cypress run"` and `"test:e2e:open": "cypress open"`.\n' +
+      '- **Write at least one smoke test** (`cypress/e2e/app.cy.ts`) that visits the home page and asserts the page loads without error.\n'
+    : '';
+
+  // Playwright-specific setup instructions — do not skip initialization
+  const playwrightBlock = quality.testingFramework === 'Playwright'
+    ? '\n### Playwright Setup (mandatory — do not skip)\n' +
+      '- Install: `@playwright/test`\n' +
+      '- Initialize with `npx playwright install` to download browser binaries (Chromium, Firefox, WebKit).\n' +
+      '- Create `playwright.config.ts` at the **project root** with `baseURL` pointing to the frontend dev server (e.g. `http://localhost:3000`).\n' +
+      '- Place test files under `playwright/` or `tests/` with `.spec.ts` extension.\n' +
+      '- Add to root `package.json`: `"test:e2e": "playwright test"` and `"test:e2e:ui": "playwright test --ui"`.\n' +
+      '- **Write at least one smoke test** (`tests/app.spec.ts`) that navigates to the home page and asserts the title/heading is visible.\n' +
+      '- Configure `reporter: [[\'html\', { open: \'never\' }]]` in `playwright.config.ts` for CI compatibility.\n'
+    : '';
+
   return [
     '## 7. Testing & Quality Assurance',
     '',
@@ -346,6 +737,8 @@ function buildQuality({ quality }) {
     `| **Coverage Enforced** | \`${yesNo(quality.hasCoverage)}\` |`,
     testTypesBlock,
     coverageBlock,
+    cypressBlock,
+    playwrightBlock,
     '---',
     '',
   ].join('\n');
@@ -359,7 +752,8 @@ function buildBackendTreeLines(backend, database, auth, infra, language) {
 
   L.push('├── backend/');
 
-  if (['NestJS', 'Express.js', 'Fastify', 'Hono'].includes(backend.framework)) {
+  if (backend.framework === 'NestJS') {
+    // NestJS: module-based architecture
     L.push('│   ├── src/');
     L.push('│   │   ├── main.ts');
     L.push('│   │   ├── app.module.ts');
@@ -387,6 +781,31 @@ function buildBackendTreeLines(backend, database, auth, infra, language) {
     L.push('│   │       ├── users.service.ts');
     L.push('│   │       ├── users.module.ts');
     L.push('│   │       └── dto/');
+
+  } else if (['Express.js', 'Fastify', 'Hono'].includes(backend.framework)) {
+    // FIX: Express / Fastify / Hono use routes-based architecture — NOT NestJS module pattern.
+    const mainFile = backend.framework === 'Hono' ? 'index.ts' : 'server.ts';
+    L.push('│   ├── src/');
+    L.push(`│   │   ├── ${mainFile}`);
+    L.push('│   │   ├── routes/');
+    L.push('│   │   │   ├── health.ts');
+    if (auth.hasAuth) L.push('│   │   │   ├── auth.ts');
+    L.push('│   │   │   └── users.ts');
+    L.push('│   │   ├── controllers/');
+    L.push('│   │   │   ├── health.controller.ts');
+    if (auth.hasAuth) L.push('│   │   │   ├── auth.controller.ts');
+    L.push('│   │   │   └── users.controller.ts');
+    L.push('│   │   ├── services/');
+    if (auth.hasAuth) L.push('│   │   │   ├── auth.service.ts');
+    L.push('│   │   │   └── users.service.ts');
+    L.push('│   │   ├── middleware/');
+    L.push('│   │   │   ├── auth.middleware.ts');
+    L.push('│   │   │   └── error.middleware.ts');
+    L.push('│   │   ├── types/');
+    L.push('│   │   │   └── index.ts');
+    L.push('│   │   └── config/');
+    L.push('│   │       └── configuration.ts');
+
   } else if (backend.framework === 'FastAPI') {
     L.push('│   ├── app/');
     L.push('│   │   ├── main.py');
@@ -583,6 +1002,7 @@ function buildDirectoryTree(answers) {
     database,
     auth,
     infra,
+    quality,
   } = answers;
 
   const slug = projectName.toLowerCase().replace(/\s+/g, '-');
@@ -606,7 +1026,10 @@ function buildDirectoryTree(answers) {
   if (infra.codeQuality.includes('Commitlint'))   L.push('├── commitlint.config.js');
   if (infra.codeQuality.includes('Husky')) {
     L.push('├── .husky/');
-    L.push('│   └── pre-commit');
+    L.push('│   ├── pre-commit');
+    // FIX: Always include commit-msg hook when Husky + Commitlint are both selected
+    if (infra.codeQuality.includes('Commitlint')) L.push('│   └── commit-msg');
+    else L.push('│   └── pre-commit');
   }
 
   // Assets
@@ -616,7 +1039,7 @@ function buildDirectoryTree(answers) {
   L.push('│   ├── favicon.ico');
   L.push('│   └── fonts/');
 
-  // Docker compose
+  // Docker compose at project root
   if (infra.hasDocker) L.push('├── docker-compose.yml');
 
   // CI/CD
@@ -644,8 +1067,34 @@ function buildDirectoryTree(answers) {
     L.push('│   └── modules/');
   }
 
-  // Backend + Frontend (frontend always last with └──)
-  L.push(...buildBackendTreeLines(backend, database, auth, infra, language));
+  // Cypress E2E directory — project root level (only when Cypress is the selected test framework)
+  if (quality && quality.testingFramework === 'Cypress') {
+    L.push('├── cypress/');
+    L.push('│   ├── e2e/');
+    L.push('│   │   └── app.cy.ts');
+    L.push('│   ├── fixtures/');
+    L.push('│   │   └── example.json');
+    L.push('│   └── support/');
+    L.push('│       └── commands.ts');
+    L.push('├── cypress.config.ts');
+  }
+
+  // Playwright directory — project root level (only when Playwright is the selected test framework)
+  if (quality && quality.testingFramework === 'Playwright') {
+    L.push('├── tests/');
+    L.push('│   └── app.spec.ts');
+    L.push('├── playwright.config.ts');
+  }
+
+  // FIX: Correct end-of-tree separator for backend-only projects.
+  // If there is no frontend, backend is the last root entry and must use └── not ├──.
+  const hasFrontend = frontend.hasFrontend;
+  const backendLines = buildBackendTreeLines(backend, database, auth, infra, language);
+  const adjustedBackendLines = (!hasFrontend && backendLines.length > 0)
+    ? [backendLines[0].replace('├── backend/', '└── backend/'), ...backendLines.slice(1)]
+    : backendLines;
+
+  L.push(...adjustedBackendLines);
   L.push(...buildFrontendTreeLines(frontend, auth, infra));
 
   L.push('```');
@@ -666,7 +1115,7 @@ function buildDirectoryTree(answers) {
   ].join('\n');
 }
 
-// ── Scaffold instructions (now section 10) ────────────────────────────────────
+// ── Scaffold instructions (section 10) ───────────────────────────────────────
 
 function buildScaffoldInstructions(answers) {
   const { frontend, backend, database, auth, infra, quality } = answers;
@@ -707,7 +1156,7 @@ function buildScaffoldInstructions(answers) {
     '',
     `6. **Docker Orchestration** *(${infra.hasDocker ? 'enabled' : 'skipped'})*`,
     infra.hasDocker
-      ? `   - Multi-stage Dockerfiles: frontend \`EXPOSE 3000\`, backend \`EXPOSE 8000\`.\n   - \`docker-compose.yml\`: all services wired with healthchecks and service-name references.`
+      ? `   - Copy the \`docker-compose.yml\` template from Section 6 **verbatim** to the project root.\n   - Do not rename services, change internal hostnames, or alter port mappings.\n   - Write multi-stage Dockerfiles: frontend \`EXPOSE 3000\`, backend \`EXPOSE 8000\`.`
       : '   _Skipped._',
     '',
     `7. **CI/CD** *(${infra.hasCICD ? `${infra.cicdPlatform} — ${list(infra.cicdSteps)}` : 'skipped'})*`,
@@ -728,6 +1177,7 @@ function buildScaffoldInstructions(answers) {
     '- Never use `localhost` as a hostname inside Docker containers — use service names.',
     '- Follow the L-2 rule: backend `/health` endpoint verified before any frontend code is written.',
     '- Follow Section 9 directory structure exactly.',
+    '- For Docker: copy the compose template from Section 6 verbatim — do not invent or remove services.',
   ].filter((l) => l !== false).join('\n');
 }
 

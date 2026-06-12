@@ -124,6 +124,44 @@ def login(request: Request):
     return {"message": "Success"}
 ```
 
+### Example Configuration (NestJS)
+```typescript
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+
+@Module({
+  imports: [
+    ThrottlerModule.forRoot([{
+      ttl: 60000,     // 1 minute
+      limit: 100,     // limit each IP to 100 requests per ttl
+    }]),
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
+})
+export class AppModule {}
+
+// auth.controller.ts
+import { Controller, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+
+@Controller('auth')
+export class AuthController {
+  // Override global rate limit for authentication endpoints (5 requests per 15 minutes)
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
+  @Post('login')
+  async login() {
+    return { status: 'success' };
+  }
+}
+```
+
 ---
 
 ## 6. Secrets Management & Logging Guard

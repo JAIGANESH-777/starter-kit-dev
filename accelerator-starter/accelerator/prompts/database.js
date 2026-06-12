@@ -75,9 +75,8 @@ export async function askDatabase(projectType, language) {
   const hasSeed = await confirm({ message: 'Include seed data scripts?' });
 
   if (databases.includes('SQLite')) {
-    console.log(chalk.yellow('\n  ⚠  SQLite selected: the root docker-compose.yml runs a PostgreSQL service.'));
-    console.log(chalk.yellow('     The SPEC will instruct the agent to use local file paths for SQLite'));
-    console.log(chalk.yellow('     and bypass the Postgres container safely.\n'));
+    console.log(chalk.yellow('\n  ⚠  SQLite selected: SQLite does not require a Docker container.'));
+    console.log(chalk.yellow('     The SPEC will instruct the agent to configure SQLite using local files.\n'));
   }
 
   return { hasDatabase, databases, orm, hasMigrations, hasSeed };

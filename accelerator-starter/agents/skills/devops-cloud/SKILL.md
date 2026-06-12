@@ -43,6 +43,35 @@ EXPOSE 3000
 CMD ["node", "dist/main.js"]
 ```
 
+### Example Python (FastAPI / Django) Dockerfile
+```dockerfile
+# Stage 1: Build dependencies
+FROM python:3.12-slim AS builder
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Stage 2: Final runtime container
+FROM python:3.12-slim
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH=/root/.local/bin:$PATH
+# Create a non-privileged user to run the app
+RUN groupadd -g 10001 appuser && \
+    useradd -u 10001 -g appuser -d /app -s /sbin/nologin -c "Docker image user" appuser
+# Copy installed python dependencies from builder stage
+COPY --from=builder /root/.local /root/.local
+COPY . .
+RUN chown -R appuser:appuser /app
+USER appuser
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
 ---
 
 ## 2. Docker Compose Orchestration

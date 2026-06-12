@@ -34,7 +34,6 @@ project-root/
     │   │   ├── logo-mark.svg
     │   │   ├── favicon.ico
     │   │   └── fonts/
-    │   ├── docker-compose.yml ← root compose file (do not modify manually)
     │   ├── prompts/        # The CLI installer and all its modules
     │   │   ├── installer.js ← entry point: node prompts/installer.js
     │   │   ├── index.js    ← orchestrator: runs all prompts in order

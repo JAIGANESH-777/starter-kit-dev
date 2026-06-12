@@ -129,3 +129,47 @@ Ensure that every controller, module, or route is declared with descriptions, sa
 1. **Interactive Route UI**: Serve Swagger documentation at the `/docs` or `/swagger` route.
 2. **Schema Models**: Decorate models/DTOs (using NestJS Swagger decorators or Pydantic schemas) with property summaries and formatting constraints.
 3. **No undocumented endpoints**: Every public API route must declare its status codes and response bodies.
+
+---
+
+## 6. GraphQL API Contracts
+
+When the backend uses GraphQL (e.g., NestJS resolvers, Apollo, or Strawberry), enforce parallel schema, error, and pagination standards.
+
+### Standardized GraphQL Error Structure
+Exceptions must return error extensions that replicate the REST validation structure. Avoid throwing generic or database-specific exceptions.
+* **Validation Failures (Input Validation)**: Must include a custom error code `VALIDATION_FAILED` and list fields in the `extensions.details` array.
+* **NestJS GraphQL Example**:
+  ```typescript
+  throw new GraphQLError('Input validation failed', {
+    extensions: {
+      code: 'VALIDATION_FAILED',
+      details: [
+        { field: 'email', issue: 'Invalid email format' }
+      ]
+    }
+  });
+  ```
+
+### Uniform Pagination Schema
+Do not return flat arrays for query listings. Wrap lists in connection/paginated types:
+```graphql
+type PaginatedUsers {
+  items: [User!]!
+  meta: PaginationMeta!
+}
+
+type PaginationMeta {
+  page: Int!
+  limit: Int!
+  totalCount: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+}
+```
+
+### GraphQL Best Practices
+1. **Explicit Return Types**: Always specify return types (e.g., `@Query(() => PaginatedUsers)`) instead of generic object types.
+2. **Schema-First / Code-First Consistency**: Ensure resolvers strictly match TypeScript DTOs/Inputs decorated with `@InputType()` or `@ArgsType()`.
+
