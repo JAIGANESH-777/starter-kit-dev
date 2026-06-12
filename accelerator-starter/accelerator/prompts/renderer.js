@@ -88,7 +88,7 @@ function buildFrontend({ frontend }) {
   ].join('\n');
 }
 
-function buildBackend({ backend }) {
+function buildBackend({ backend, auth, language }) {
   if (!backend.hasBackend) return '## 3. Backend\n_No backend included._\n\n---\n\n';
 
   const extrasBlock = backend.backendExtras.length > 0
@@ -197,8 +197,57 @@ function buildBackend({ backend }) {
       extrasInstructionLines.push('- Upload buffer with `PutObjectCommand`; generate presigned URLs with `getSignedUrl`.');
     }
   }
+  if (backend.backendExtras.includes('Rate Limiting')) {
+    extrasInstructionLines.push('#### Rate Limiting');
+    if (isNestJS) {
+      extrasInstructionLines.push('- Install: `@nestjs/throttler`');
+      extrasInstructionLines.push('- Register `ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }])` globally in `app.module.ts` and bind the `ThrottlerGuard` globally (provider: `APP_GUARD`, useClass: `ThrottlerGuard`).');
+      extrasInstructionLines.push('- Apply `@Throttle({ default: { limit: 5, ttl: 900000 } })` decorators on authentication endpoints (e.g. login, verify-otp) to enforce a strict limit of 5 requests per 15 minutes.');
+    } else if (backend.framework === 'Fastify') {
+      extrasInstructionLines.push('- Install: `@fastify/rate-limit`');
+      extrasInstructionLines.push('- Register `@fastify/rate-limit` globally in `main.ts` with sensible defaults (e.g. 100 requests per minute).');
+      extrasInstructionLines.push('- Configure custom rate limits (5 attempts per 15 minutes) specifically for authentication route handlers.');
+    } else if (backend.framework === 'Express.js') {
+      extrasInstructionLines.push('- Install: `express-rate-limit`');
+      extrasInstructionLines.push('- Register the rate limiter middleware globally in `server.ts` for general API endpoints, and apply a secondary, stricter limiter instance directly on authentication routes.');
+    } else if (isFastAPI) {
+      extrasInstructionLines.push('- Install: `slowapi`');
+      extrasInstructionLines.push('- Set up a `Limiter` in `app/core/security.py` using client IP address and wire the middleware to the FastAPI app.');
+      extrasInstructionLines.push('- Apply the `@limiter.limit("5/15minute")` decorator to auth route definitions.');
+    }
+  }
   const extrasInstructionsBlock = extrasInstructionLines.length > 0
     ? `\n### Feature Integration Instructions\n> These features must be **wired up with actual code**, not just installed as packages.\n${extrasInstructionLines.join('\n')}\n`
+    : '';
+
+  // Security Baselines
+  const securityBaselineLines = [];
+  if (language === 'TypeScript' || language === 'JavaScript') {
+    if (isNestJS) {
+      securityBaselineLines.push('- **Security Headers (Helmet)**: Install `helmet` and register it globally in `main.ts` via `app.use(helmet())`.');
+      if (auth.hasAuth) {
+        securityBaselineLines.push('- **Cookie Parser**: Install `@fastify/cookie` (if using Fastify) or `cookie-parser` (if using Express), register it globally, and configure `JwtStrategy` to extract tokens from cookies (`request.cookies.token`).');
+      }
+    } else if (backend.framework === 'Fastify') {
+      securityBaselineLines.push('- **Security Headers (Helmet)**: Install `@fastify/helmet` and register it globally in `main.ts` via `await app.register(fastifyHelmet)`.');
+      if (auth.hasAuth) {
+        securityBaselineLines.push('- **Cookie Parser**: Install `@fastify/cookie` and register it globally in `main.ts` before authentication strategy extraction.');
+      }
+    } else {
+      securityBaselineLines.push('- **Security Headers (Helmet)**: Install `helmet` and register it globally in `server.ts` via `app.use(helmet())`.');
+      if (auth.hasAuth) {
+        securityBaselineLines.push('- **Cookie Parser**: Install `cookie-parser` and register it globally in `server.ts`.');
+      }
+    }
+  } else if (language === 'Python') {
+    if (backend.framework === 'Django') {
+      securityBaselineLines.push('- **Security Middleware**: Ensure `django.middleware.security.SecurityMiddleware` is active in `settings.py`. Set `SECURE_SSL_REDIRECT = True` and configure HSTS parameters in production setting modules.');
+    } else if (isFastAPI) {
+      securityBaselineLines.push('- **Security Middleware**: Configure custom middleware or `CORSMiddleware` to inject standard security headers (X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security).');
+    }
+  }
+  const securityBaselineBlock = securityBaselineLines.length > 0
+    ? `\n### Security & Transport Baselines\n${securityBaselineLines.join('\n')}\n`
     : '';
 
   return [
@@ -223,7 +272,7 @@ function buildBackend({ backend }) {
     '```',
     modulePatternHint,
     '```',
-    '',
+    securityBaselineBlock,
     extrasInstructionsBlock,
     '### Health Endpoint (L-2 Rule)',
     '- Route: `GET /api/health` → `{ status: "ok" }` with HTTP 200',
@@ -406,7 +455,7 @@ function buildAuth({ auth, projectType }) {
     '',
     '### Implementation Rules',
     '- Protect all non-public routes with auth guards/middleware.',
-    '- Store tokens in HTTP-only cookies — never in localStorage.',
+    '- Store tokens in HTTP-only cookies — never in localStorage. Set the `HttpOnly`, `Secure` (production only), and `SameSite=Strict` flags on the auth cookie to prevent session leakage and hijacking.',
     '- Refresh tokens must be rotated on every use.',
     auth.hasMultiTenant ? '- Multi-tenant: scope every DB query to the resolved `tenantId`. Cross-tenant access is a critical security bug.' : '',
     authUIBlock,

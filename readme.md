@@ -39,16 +39,17 @@ Starter-Kit dev/
 
 ## 🧠 Custom AI Agent Skills
 
-To support automated scaffolding using AI coding assistants (such as Claude Code, Cursor, or Codex), the repository includes 8 specialized agent skills under `accelerator-starter/agents/skills/`. When invoking an AI agent to build, migrate, or extend features, reference these skills to guide the agent's behavior:
+To support automated scaffolding using AI coding assistants (such as Claude Code, Cursor, or Codex), the repository includes 9 specialized agent skills under `accelerator-starter/agents/skills/`. When invoking an AI agent to build, migrate, or extend features, reference these skills to guide the agent's behavior:
 
 | Skill Directory | Purpose | When to Use |
 | :--- | :--- | :--- |
 | [`accelerator-scaffolder`](file:///c:/Projects/Starter-Kit%20dev/accelerator-starter/agents/skills/accelerator-scaffolder/SKILL.md) | Translates target specs from `SPEC.md` to a multi-container environment. | Initial project bootstrapping and framework setup. |
-| [`api-contract`](file:///c:/Projects/Starter-Kit%20dev/accelerator-starter/agents/skills/api-contract/SKILL.md) | Enforces REST API contract standards, OpenAPI generation, and payload formats. | Designing backend controllers, route versions, and DTOs. |
+| [`api-contract`](file:///c:/Projects/Starter-Kit%20dev/accelerator-starter/agents/skills/api-contract/SKILL.md) | Enforces REST/GraphQL API contract designs, Swagger generation, and validation. | Designing backend controllers, resolvers, route versions, and DTOs. |
 | [`db-migration`](file:///c:/Projects/Starter-Kit%20dev/accelerator-starter/agents/skills/db-migration/SKILL.md) | Guides schema modeling, seed scripts, and safe database migration commands. | Defining database schemas or performing migrations. |
 | [`devops-cloud`](file:///c:/Projects/Starter-Kit%20dev/accelerator-starter/agents/skills/devops-cloud/SKILL.md) | Configures multi-stage Dockerfiles, CI/CD pipelines, and Terraform IaC modules. | Modifying deployment configurations, Docker setups, or pipelines. |
 | [`frontend-design`](file:///c:/Projects/Starter-Kit%20dev/accelerator-starter/agents/skills/frontend-design/SKILL.md) | Enforces beautiful, custom-tailored visual design guidelines and CSS patterns. | Building frontend layouts, styling custom themes, or styling UI cards. |
 | [`security-hardening`](file:///c:/Projects/Starter-Kit%20dev/accelerator-starter/agents/skills/security-hardening/SKILL.md) | Audits and secures backend APIs, CORS policies, rate limiting, and cookie flags. | Auditing security, handling JWTs, or managing environment variables. |
+| [`state-ssr`](file:///c:/Projects/Starter-Kit%20dev/accelerator-starter/agents/skills/state-ssr/SKILL.md) | Prevents Next.js/Nuxt hydration errors and isolates server state from client store cache. | Integrating state stores (Jotai, Zustand) or configuring App Router. |
 | [`stack-doctor`](file:///c:/Projects/Starter-Kit%20dev/accelerator-starter/agents/skills/stack-doctor/SKILL.md) | Diagnoses and resolves post-scaffold container conflicts and build failures. | Debugging start, build, connection, or framework issues. |
 | [`tdd`](file:///c:/Projects/Starter-Kit%20dev/accelerator-starter/agents/skills/tdd/SKILL.md) | Guides test-driven development cycles using red-green-refactor vertical slices. | Writing unit, integration, and E2E tests for features. |
 
