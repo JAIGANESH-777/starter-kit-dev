@@ -747,7 +747,7 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
     L.push('      - ALLOWED_ORIGINS=http://localhost:3000');
     if (hasPostgres) L.push('      - DATABASE_URL=postgresql://postgres:postgres@db:5432/appdb');
     if (hasMySQL)    L.push('      - DATABASE_URL=mysql://appuser:apppassword@db:3306/appdb');
-    if (hasMongo)    L.push('      - MONGODB_URI=mongodb://mongo:27017/appdb');
+    if (hasMongo)    L.push('      - DATABASE_URL=mongodb://mongo:27017/appdb');
     if (hasRedis)    L.push('      - REDIS_URL=redis://redis:6379/0');
     if (hasKeycloak) {
       L.push('      - KEYCLOAK_SERVER_URL=http://keycloak:8080');
