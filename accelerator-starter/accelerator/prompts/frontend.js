@@ -100,9 +100,6 @@ export async function askFrontend(projectType) {
     message: 'Additional frontend tooling: (space to select, enter to skip)',
     choices: [
       { name: 'Dark mode support', value: 'Dark Mode' },
-      { name: 'Storybook (component docs)', value: 'Storybook' },
-      { name: 'i18n / internationalisation', value: 'i18n' },
-      { name: 'PWA support', value: 'PWA' },
       { name: 'Playwright (E2E tests)', value: 'Playwright' },
     ],
   });

@@ -29,8 +29,6 @@ export async function askAuth(projectType, language) {
       { name: 'Microsoft / Azure AD SSO', value: 'Azure AD OAuth' },
       { name: 'GitHub OAuth', value: 'GitHub OAuth' },
       { name: 'Magic Link (passwordless email)', value: 'Magic Link' },
-      { name: 'Apple Sign-In', value: 'Apple Sign-In' },
-      { name: 'SAML 2.0 (enterprise SSO)', value: 'SAML 2.0' },
       { name: 'OTP / SMS verification', value: 'OTP/SMS' },
     ],
     validate: (selected) => selected.length > 0 || 'Select at least one auth method.',

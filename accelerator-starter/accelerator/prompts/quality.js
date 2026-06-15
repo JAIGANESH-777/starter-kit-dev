@@ -49,7 +49,6 @@ export async function askQuality(language) {
     testTypeChoices = [
       { name: 'E2E tests (full user flows)', value: 'E2E tests' },
       { name: 'API tests (Playwright API testing)', value: 'API tests' },
-      { name: 'Visual regression tests', value: 'Visual regression' },
     ];
   } else {
     // Vitest or Jest — unit/integration/API primary, can add E2E on top

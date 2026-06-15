@@ -22,7 +22,6 @@ function printSummary(answers) {
   const row = (label, value) =>
     chalk.gray('  ') + chalk.bold.white(label.padEnd(20)) + chalk.cyan(value || '—');
 
-  const tag = (v) => (v ? chalk.green('✔  ' + v) : chalk.dim('—'));
   const yesno = (v) => (v ? chalk.green('Yes') : chalk.dim('No'));
   const list = (arr) => (arr && arr.length > 0 ? arr.join(', ') : chalk.dim('None'));
 

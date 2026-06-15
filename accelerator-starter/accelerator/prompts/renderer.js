@@ -46,7 +46,7 @@ function buildOverview({ projectName, projectType, language, description, genera
   ].join('\n');
 }
 
-function buildFrontend({ frontend }) {
+function buildFrontend({ frontend, auth }) {
   if (!frontend.hasFrontend) return '## 2. Frontend\n_No frontend included._\n\n---\n\n';
 
   const apiUrlVar = frontend.framework.includes('Vite') ? 'VITE_API_URL'
@@ -56,6 +56,23 @@ function buildFrontend({ frontend }) {
 
   const extrasBlock = frontend.frontendExtras.length > 0
     ? `\n### Additional Tooling\n${bullet(frontend.frontendExtras)}\n` : '';
+
+  const cookieCredentialsBlock = auth && auth.hasAuth
+    ? '\n### Cookie Credentials Transmission (mandatory for auth)\n' +
+      '- Set client-side fetching clients to send cookies automatically with requests:\n' +
+      '  - **Axios**: set `axios.defaults.withCredentials = true` globally or pass `{ withCredentials: true }` in Axios instance options.\n' +
+      '  - **Fetch API**: pass `{ credentials: \'include\' }` in options block.\n' +
+      '  - **SWR**: configure the fetcher parameter to pass `{ credentials: \'include\' }`.\n' +
+      '  - **TanStack Query**: configure query/mutation fetch functions to use credentials options.\n'
+    : '';
+
+  const initCmd = frontend.framework === 'Next.js'
+    ? 'npx create-next-app@latest frontend --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm'
+    : frontend.framework === 'React + Vite'
+    ? 'npm create vite@latest frontend -- --template react-ts'
+    : frontend.framework === 'Nuxt 3'
+    ? 'npx nuxi@latest init frontend --packageManager npm --gitInit false'
+    : 'npm create svelte@latest frontend';
 
   return [
     '## 2. Frontend',
@@ -77,6 +94,12 @@ function buildFrontend({ frontend }) {
     '',
     '> **SSR Note** (Next.js / Nuxt / SvelteKit): server-side fetches inside Docker must use the backend service name,',
     '> e.g. `http://backend:8000/api`. Client-side fetches always use `localhost`.',
+    cookieCredentialsBlock,
+    '### Framework Bootstrap Command',
+    'Execute this command to scaffold the frontend project framework:',
+    '```bash',
+    initCmd,
+    '```',
     '',
     '### Design System Adapter Bindings',
     '- Read colors, spacing, and typography from `shared_tokens.md` before writing any CSS.',
@@ -88,7 +111,7 @@ function buildFrontend({ frontend }) {
   ].join('\n');
 }
 
-function buildBackend({ backend, auth, language }) {
+function buildBackend({ backend, auth, database, language }) {
   if (!backend.hasBackend) return '## 3. Backend\n_No backend included._\n\n---\n\n';
 
   const extrasBlock = backend.backendExtras.length > 0
@@ -157,6 +180,10 @@ function buildBackend({ backend, auth, language }) {
       extrasInstructionLines.push('- Create `src/queues/worker.ts` — initialize a `Worker` from `bullmq` using `REDIS_URL`.');
       extrasInstructionLines.push('- Create `src/queues/producer.ts` — export a `Queue` instance for enqueueing jobs.');
     }
+  }
+  if (backend.backendExtras.includes('Redis Caching') || backend.backendExtras.includes('Background Queues')) {
+    extrasInstructionLines.push('#### Redis Connection Resilience');
+    extrasInstructionLines.push('- **Auto-Reconnect**: Configure client options to automatically reconnect when connection is dropped (e.g. in `ioredis` set `retryStrategy` option).');
   }
   if (backend.backendExtras.includes('WebSockets')) {
     extrasInstructionLines.push('#### WebSockets');
@@ -250,6 +277,18 @@ function buildBackend({ backend, auth, language }) {
     ? `\n### Security & Transport Baselines\n${securityBaselineLines.join('\n')}\n`
     : '';
 
+  const backendInitCmd = backend.framework === 'NestJS'
+    ? 'npx @nestjs/cli new backend --package-manager npm'
+    : backend.framework === 'Django'
+    ? 'mkdir backend && cd backend && python -m venv venv && source venv/bin/activate (or venv\\Scripts\\activate) && pip install django djangorestframework django-environ'
+    : backend.framework === 'FastAPI'
+    ? 'mkdir backend && cd backend && python -m venv venv && source venv/bin/activate (or venv\\Scripts\\activate) && pip install fastapi uvicorn pydantic'
+    : 'mkdir backend && cd backend && npm init -y && npm install typescript @types/node ts-node -D && npx tsc --init';
+
+  const envValidationSnippet = language === 'Python'
+    ? '# Validate environment variables using pydantic-settings or custom checks\nfrom pydantic_settings import BaseSettings\n\nclass Settings(BaseSettings):\n    DATABASE_URL: str\n    JWT_SECRET: str\n    PORT: int = 8000\n\n    class Config:\n        env_file = ".env"\n\nsettings = Settings()'
+    : '// Validate environment variables at startup using Zod or Envalid\nimport { cleanEnv, str, port } from "envalid";\n\nexport const env = cleanEnv(process.env, {\n  DATABASE_URL: str(),\n  JWT_SECRET: str(),\n  PORT: port({ default: 8000 }),\n});';
+
   return [
     '## 3. Backend',
     '',
@@ -266,6 +305,17 @@ function buildBackend({ backend, auth, language }) {
     'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/appdb',
     'JWT_SECRET=change-me-in-production',
     `PORT=8000${extraEnvVars}`,
+    '```',
+    '',
+    '### Framework Bootstrap Command',
+    'Execute this command to scaffold the backend project framework:',
+    '```bash',
+    backendInitCmd,
+    '```',
+    '',
+    '### Environment Variables Validation',
+    `\`\`\`${language === 'Python' ? 'python' : 'typescript'}`,
+    envValidationSnippet,
     '```',
     '',
     '### Module Pattern',
@@ -321,6 +371,63 @@ function buildDatabase({ database }) {
     : 'MONGO_INITDB_DATABASE: appdb';
   const dbPort = hasMongo ? '27017:27017' : '5432:5432';
 
+  let prismaConnGuard = '';
+  if (database.orm === 'Prisma') {
+    prismaConnGuard = '\n#### C-2 Connection Override Code (Insert in backend startup/main.ts)\n' +
+      '```typescript\n' +
+      '// Override postgres:// with postgresql:// for Prisma compatibility\n' +
+      'const databaseUrl = process.env.DATABASE_URL;\n' +
+      'if (databaseUrl && databaseUrl.startsWith("postgres://")) {\n' +
+      '  process.env.DATABASE_URL = databaseUrl.replace("postgres://", "postgresql://");\n' +
+      '}\n' +
+      '```\n';
+  }
+
+  let poolInstructions = '';
+  if (database.hasDatabase) {
+    poolInstructions = '\n### Connection Pooling Configurations\n' +
+      'To comply with production performance standards, configure connection pooling:\n';
+    if (database.orm === 'Prisma') {
+      poolInstructions += '- **Prisma**: Append `?connection_limit=10` to `DATABASE_URL` for container limits. For serverless deployment, utilize Prisma Accelerate or pgBouncer in transaction mode.\n';
+    } else if (database.orm === 'Drizzle ORM') {
+      poolInstructions += '- **Drizzle ORM**: Configure the `pg` Pool helper with dynamic sizing:\n' +
+        '  ```typescript\n' +
+        '  import { Pool } from "pg";\n' +
+        '  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });\n' +
+        '  ```\n';
+    } else if (database.orm === 'SQLAlchemy') {
+      poolInstructions += '- **SQLAlchemy**: Configure engine pools with limits:\n' +
+        '  ```python\n' +
+        '  engine = create_async_engine(\n' +
+        '      DATABASE_URL,\n' +
+        '      pool_size=10,\n' +
+        '      max_overflow=20,\n' +
+        '      pool_recycle=1800\n' +
+        '  )\n' +
+        '  ```\n';
+    } else if (database.orm === 'TypeORM') {
+      poolInstructions += '- **TypeORM**: Add pool parameters to your DataSource configuration object:\n' +
+        '  ```typescript\n' +
+        '  extra: {\n' +
+        '    max: 10,\n' +
+        '    idleTimeoutMillis: 30000,\n' +
+        '  }\n' +
+        '  ```\n';
+    } else if (database.orm === 'Django ORM') {
+      poolInstructions += '- **Django ORM**: Add `CONN_MAX_AGE` to database configurations in settings to persist connections:\n' +
+        '  ```python\n' +
+        '  DATABASES = {\n' +
+        '      "default": dj_database_url.config(\n' +
+        '          default=os.getenv("DATABASE_URL"),\n' +
+        '          conn_max_age=600\n' +
+        '      )\n' +
+        '  }\n' +
+        '  ```\n';
+    } else {
+      poolInstructions += '- Limit connections using driver configuration parameters (e.g. `max: 10` for pg, `poolSize: 10` for mongodb).\n';
+    }
+  }
+
   return [
     '## 4. Database',
     '',
@@ -336,7 +443,8 @@ function buildDatabase({ database }) {
     hasSQLite ? '- **SQLite**: use `file:./dev.db` (dev) or `file:/app/db/local.db` (Docker). Skip the Postgres container.' : '',
     hasPostgres ? '- In Docker, the DB host is the service name (e.g. `db`), not `localhost`.' : '',
     hasMongo ? '- MongoDB URI: `mongodb://user:pass@mongo:27017/dbname` inside Docker.' : '',
-    '',
+    prismaConnGuard,
+    poolInstructions,
     '### Migration Commands',
     `- Run: ${migrationCmd}`,
     database.hasSeed ? '- Run seed scripts immediately after migrations.' : '',
@@ -605,10 +713,32 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
       hasKeycloak && 'keycloak',
     ].filter(Boolean);
 
+    let backendStartCmd = 'npm run start';
+    if (backend.framework === 'NestJS') {
+      backendStartCmd = database.hasDatabase && database.orm === 'Prisma'
+        ? 'sh -c "npx prisma migrate deploy && npm run start:prod"'
+        : database.hasDatabase && database.orm === 'Drizzle ORM'
+        ? 'sh -c "npx drizzle-kit migrate && npm run start:prod"'
+        : 'npm run start:prod';
+    } else if (backend.framework === 'Django') {
+      backendStartCmd = 'sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"';
+    } else if (backend.framework === 'FastAPI') {
+      backendStartCmd = database.hasDatabase && database.orm === 'SQLAlchemy'
+        ? 'sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"'
+        : 'uvicorn app.main:app --host 0.0.0.0 --port 8000';
+    } else if (['Express.js', 'Fastify', 'Hono'].includes(backend.framework)) {
+      backendStartCmd = database.hasDatabase && database.orm === 'Prisma'
+        ? 'sh -c "npx prisma migrate deploy && npm run start"'
+        : database.hasDatabase && database.orm === 'Drizzle ORM'
+        ? 'sh -c "npx drizzle-kit migrate && npm run start"'
+        : 'npm run start';
+    }
+
     L.push('  backend:');
     L.push('    build:');
     L.push('      context: ./backend');
     L.push('    container_name: app_backend');
+    L.push(`    command: ${backendStartCmd}`);
     L.push('    ports:');
     L.push("      - '8000:8000'");
     L.push('    environment:');
@@ -674,7 +804,7 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
   return L.join('\n');
 }
 
-function buildInfra({ infra, frontend, backend, database, auth }) {
+function buildInfra({ infra, frontend, backend, database, auth, language }) {
   const parts = [
     '## 6. Infrastructure & DevOps',
     '',
@@ -706,7 +836,93 @@ function buildInfra({ infra, frontend, backend, database, auth }) {
 
   if (infra.hasCICD && infra.cicdSteps.length > 0) {
     parts.push(`### CI/CD Pipeline (${infra.cicdPlatform})`);
-    parts.push(bullet(infra.cicdSteps));
+    parts.push(`Create this configuration at the root of your project.`);
+    parts.push('');
+
+    if (infra.cicdPlatform === 'GitHub Actions') {
+      const stepsYaml = [];
+      if (infra.cicdSteps.includes('Lint')) {
+        stepsYaml.push('      - name: Run Linters\n        run: ' + (language === 'Python' ? 'pip install ruff && ruff check .' : 'npm run lint'));
+      }
+      if (infra.cicdSteps.includes('Type check')) {
+        stepsYaml.push('      - name: Type Check\n        run: ' + (language === 'Python' ? 'pip install mypy && mypy .' : 'npm run typecheck'));
+      }
+      if (infra.cicdSteps.includes('Unit tests')) {
+        stepsYaml.push('      - name: Run Unit Tests\n        run: ' + (language === 'Python' ? 'pytest' : 'npm run test'));
+      }
+      if (infra.cicdSteps.includes('Build')) {
+        stepsYaml.push('      - name: Production Build\n        run: ' + (language === 'Python' ? 'echo "No build step required for Python"' : 'npm run build'));
+      }
+      if (infra.cicdSteps.includes('Docker build & push')) {
+        stepsYaml.push('      - name: Set up Docker Buildx\n        uses: docker/setup-buildx-action@v2\n      - name: Build and Push Docker Image\n        run: |\n          docker build -t app-service:latest .\n          # docker push my-registry/app-service:latest');
+      }
+      if (infra.cicdSteps.includes('Deploy staging')) {
+        stepsYaml.push('      - name: Deploy to Staging\n        run: echo "Deploying to staging environment..."');
+      }
+      if (infra.cicdSteps.includes('Deploy production')) {
+        stepsYaml.push('      - name: Deploy to Production\n        run: echo "Deploying to production environment..."');
+      }
+
+      parts.push('```yaml');
+      parts.push('# .github/workflows/ci.yml');
+      parts.push('name: CI/CD Pipeline');
+      parts.push('');
+      parts.push('on:');
+      parts.push('  push:');
+      parts.push('    branches: [ main, master ]');
+      parts.push('  pull_request:');
+      parts.push('    branches: [ main, master ]');
+      parts.push('');
+      parts.push('jobs:');
+      parts.push('  pipeline:');
+      parts.push('    runs-on: ubuntu-latest');
+      parts.push('    steps:');
+      parts.push('      - name: Checkout Code');
+      parts.push('        uses: actions/checkout@v3');
+      if (language === 'Python') {
+        parts.push('      - name: Set up Python');
+        parts.push('        uses: actions/setup-python@v4');
+        parts.push('        with:');
+        parts.push('          python-version: "3.11"');
+        parts.push('      - name: Install Dependencies');
+        parts.push('        run: pip install -r requirements.txt');
+      } else {
+        parts.push('      - name: Set up Node.js');
+        parts.push('        uses: actions/setup-node@v3');
+        parts.push('        with:');
+        parts.push('          node-version: "20"');
+        parts.push('          cache: "npm"');
+        parts.push('      - name: Install Dependencies');
+        parts.push('        run: npm ci');
+      }
+      parts.push(stepsYaml.join('\n'));
+      parts.push('```');
+    } else if (infra.cicdPlatform === 'GitLab CI') {
+      parts.push('```yaml');
+      parts.push('# .gitlab-ci.yml');
+      parts.push('stages:');
+      parts.push('  - test');
+      parts.push('  - build');
+      parts.push('  - deploy');
+      parts.push('');
+      parts.push('pipeline_job:');
+      parts.push('  image: ' + (language === 'Python' ? 'python:3.11' : 'node:20'));
+      parts.push('  stage: test');
+      parts.push('  script:');
+      if (language === 'Python') {
+        parts.push('    - pip install -r requirements.txt');
+        if (infra.cicdSteps.includes('Lint')) parts.push('    - pip install ruff && ruff check .');
+        if (infra.cicdSteps.includes('Unit tests')) parts.push('    - pytest');
+      } else {
+        parts.push('    - npm ci');
+        if (infra.cicdSteps.includes('Lint')) parts.push('    - npm run lint');
+        if (infra.cicdSteps.includes('Unit tests')) parts.push('    - npm run test');
+        if (infra.cicdSteps.includes('Build')) parts.push('    - npm run build');
+      }
+      parts.push('```');
+    } else {
+      parts.push(`Include a standard pipeline config for **${infra.cicdPlatform}** executing: ${infra.cicdSteps.join(', ')}.`);
+    }
     parts.push('');
   }
 
@@ -723,19 +939,263 @@ function buildInfra({ infra, frontend, backend, database, auth }) {
       infra.codeQuality.includes('SonarQube') && '- **SonarQube**: `sonar-project.properties` at root. Set `sonar.sources`, `sonar.tests`, coverage exclusions.',
     ].filter(Boolean);
     if (notes.length > 0) parts.push(...notes, '');
+
+    if (infra.codeQuality.includes('ESLint')) {
+      parts.push('#### eslint.config.mjs (ESLint Flat Config)');
+      parts.push('```javascript');
+      parts.push('import js from "@eslint/js";');
+      parts.push('import ts from "@typescript-eslint/eslint-plugin";');
+      parts.push('import tsParser from "@typescript-eslint/parser";');
+      parts.push('');
+      parts.push('export default [');
+      parts.push('  js.configs.recommended,');
+      parts.push('  {');
+      parts.push('    files: ["**/*.ts", "**/*.tsx"],');
+      parts.push('    languageOptions: {');
+      parts.push('      parser: tsParser,');
+      parts.push('      parserOptions: {');
+      parts.push('        ecmaVersion: "latest",');
+      parts.push('        sourceType: "module",');
+      parts.push('      },');
+      parts.push('    },');
+      parts.push('    plugins: {');
+      parts.push('      "@typescript-eslint": ts,');
+      parts.push('    },');
+      parts.push('    rules: {');
+      parts.push('      "@typescript-eslint/no-unused-vars": "warn",');
+      parts.push('      "no-console": ["warn", { allow: ["warn", "error", "info"] }],');
+      parts.push('    },');
+      parts.push('  },');
+      parts.push('];');
+      parts.push('```');
+      parts.push('');
+    }
+    if (infra.codeQuality.includes('Prettier')) {
+      parts.push('#### .prettierrc (Prettier Formatting Configuration)');
+      parts.push('```json');
+      parts.push('{');
+      parts.push('  "singleQuote": true,');
+      parts.push('  "semi": true,');
+      parts.push('  "printWidth": 100,');
+      parts.push('  "tabWidth": 2,');
+      parts.push('  "trailingComma": "all"');
+      parts.push('}');
+      parts.push('```');
+      parts.push('');
+    }
+    if (infra.codeQuality.includes('lint-staged')) {
+      parts.push('#### lint-staged (Add to package.json)');
+      parts.push('```json');
+      parts.push('{');
+      parts.push('  "lint-staged": {');
+      parts.push('    "*.{ts,tsx,js,jsx}": [');
+      parts.push('      "eslint --fix",');
+      parts.push('      "prettier --write"');
+      parts.push('    ]');
+      parts.push('  }');
+      parts.push('}');
+      parts.push('```');
+      parts.push('');
+    }
   }
 
   if (infra.infraExtras.length > 0) {
-    parts.push('### Additional Infrastructure');
-    parts.push(bullet(infra.infraExtras));
+    parts.push('### Additional Infrastructure Configurations');
     parts.push('');
+
+    if (infra.infraExtras.includes('Kubernetes')) {
+      parts.push('#### Kubernetes deployment.yaml');
+      parts.push('```yaml');
+      parts.push('# k8s/deployment.yaml');
+      parts.push('apiVersion: apps/v1');
+      parts.push('kind: Deployment');
+      parts.push('metadata:');
+      parts.push('  name: app-deployment');
+      parts.push('  labels:');
+      parts.push('    app: web');
+      parts.push('spec:');
+      parts.push('  replicas: 2');
+      parts.push('  selector:');
+      parts.push('    matchLabels:');
+      parts.push('      app: web');
+      parts.push('  template:');
+      parts.push('    metadata:');
+      parts.push('      labels:');
+      parts.push('        app: web');
+      parts.push('    spec:');
+      parts.push('      containers:');
+      parts.push('        - name: app');
+      parts.push('          image: app-service:latest');
+      parts.push('          ports:');
+      parts.push('            - containerPort: 8000');
+      parts.push('---');
+      parts.push('apiVersion: v1');
+      parts.push('kind: Service');
+      parts.push('metadata:');
+      parts.push('  name: app-service');
+      parts.push('spec:');
+      parts.push('  selector:');
+      parts.push('    app: web');
+      parts.push('  ports:');
+      parts.push('    - protocol: TCP');
+      parts.push('      port: 80');
+      parts.push('      targetPort: 8000');
+      parts.push('  type: ClusterIP');
+      parts.push('```');
+      parts.push('');
+    }
+
+    if (infra.infraExtras.includes('Nginx')) {
+      parts.push('#### Nginx reverse proxy configuration');
+      parts.push('```nginx');
+      parts.push('# nginx/nginx.conf');
+      parts.push('events { worker_connections 1024; }');
+      parts.push('');
+      parts.push('http {');
+      parts.push('    include       /etc/nginx/mime.types;');
+      parts.push('    default_type  application/octet-stream;');
+      parts.push('');
+      parts.push('    # Gzip Compression (Performance Compliance)');
+      parts.push('    gzip on;');
+      parts.push('    gzip_vary on;');
+      parts.push('    gzip_min_length 10240;');
+      parts.push('    gzip_proxied any;');
+      parts.push('    gzip_types text/plain text/css text/xml text/javascript application/javascript application/x-javascript application/xml application/json;');
+      parts.push('    gzip_disable "MSIE [1-6]\\.";');
+      parts.push('');
+      parts.push('    upstream backend_service {');
+      parts.push('        server backend:8000;');
+      parts.push('    }');
+      parts.push('');
+      parts.push('    upstream frontend_service {');
+      parts.push('        server frontend:3000;');
+      parts.push('    }');
+      parts.push('');
+      parts.push('    # HTTP Server (Redirect port 80 -> HTTPS port 443 in production)');
+      parts.push('    server {');
+      parts.push('        listen 80;');
+      parts.push('        server_name localhost;');
+      parts.push('');
+      parts.push('        # Uncomment to enforce SSL redirect in production:');
+      parts.push('        # return 301 https://$host$request_uri;');
+      parts.push('');
+      parts.push('        location /api {');
+      parts.push('            proxy_pass http://backend_service;');
+      parts.push('            proxy_set_header Host $host;');
+      parts.push('            proxy_set_header X-Real-IP $remote_addr;');
+      parts.push('            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;');
+      parts.push('        }');
+      parts.push('');
+      parts.push('        location / {');
+      parts.push('            proxy_pass http://frontend_service;');
+      parts.push('            proxy_set_header Host $host;');
+      parts.push('            proxy_set_header X-Real-IP $remote_addr;');
+      parts.push('        }');
+      parts.push('    }');
+      parts.push('');
+      parts.push('    # HTTPS Server (SSL/TLS configuration placeholder)');
+      parts.push('    # server {');
+      parts.push('    #     listen 443 ssl http2;');
+      parts.push('    #     server_name localhost;');
+      parts.push('    #');
+      parts.push('    #     ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;');
+      parts.push('    #     ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;');
+      parts.push('    #     ssl_protocols TLSv1.2 TLSv1.3;');
+      parts.push('    #     ssl_ciphers HIGH:!aNULL:!MD5;');
+      parts.push('    #');
+      parts.push('    #     location /api {');
+      parts.push('    #         proxy_pass http://backend_service;');
+      parts.push('    #         proxy_set_header Host $host;');
+      parts.push('    #         proxy_set_header X-Real-IP $remote_addr;');
+      parts.push('    #         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;');
+      parts.push('    #     }');
+      parts.push('    #');
+      parts.push('    #     location / {');
+      parts.push('    #         proxy_pass http://frontend_service;');
+      parts.push('    #         proxy_set_header Host $host;');
+      parts.push('    #         proxy_set_header X-Real-IP $remote_addr;');
+      parts.push('    #     }');
+      parts.push('    # }');
+      parts.push('}');
+      parts.push('```');
+      parts.push('');
+    }
+
+    if (infra.infraExtras.includes('CDN')) {
+      parts.push('#### CDN Distribution rules');
+      parts.push('- **Origin settings**: Route requests matching `/api/*` directly to target application servers.');
+      parts.push('- **Caching policies**: Configure cache duration headers (`Cache-Control: public, max-age=31536000`) for all frontend `/static/*` and `/_next/*` asset directories.');
+      parts.push('- **SSL Requirement**: Force HTTPS redirect at edge routing layer.');
+      parts.push('');
+    }
+
+    if (infra.infraExtras.includes("Let's Encrypt SSL")) {
+      parts.push('#### Let\'s Encrypt Certificate setup script');
+      parts.push('```bash');
+      parts.push('# provision-ssl.sh');
+      parts.push('# Install Certbot');
+      parts.push('sudo apt-get update && sudo apt-get install -y certbot python3-certbot-nginx');
+      parts.push('');
+      parts.push('# Request certificate (replace example.com)');
+      parts.push('# sudo certbot --nginx -d example.com -d www.example.com --non-interactive --agree-tos -m admin@example.com');
+      parts.push('```');
+      parts.push('');
+    }
+
+    if (infra.infraExtras.includes('Secrets Management')) {
+      parts.push('#### Secrets Management Configuration');
+      parts.push('- **Environment Variable Mapping**: Inject secrets at runtime instead of hardcoding.');
+      parts.push('- **AWS Secrets Manager / HashiCorp Vault Integration**:');
+      parts.push('  - Store DB passwords, API keys, and private tokens securely.');
+      parts.push('  - Query credentials dynamically on app initialization or inject them as environment variables in the container definition.');
+      parts.push('');
+    }
   }
 
   if (infra.hasTerraform) {
-    parts.push('### Terraform');
-    parts.push(`- Provider: \`${infra.cloud}\``);
-    parts.push('- Modules in `terraform/`: networking, compute, database, IAM');
-    parts.push('- Use remote state backend (S3 / Azure Blob / GCS)');
+    parts.push('### Terraform Infrastructure Configuration');
+    parts.push('');
+    parts.push('Place the IaC manifest in the `terraform/` directory.');
+    parts.push('');
+
+    let providerBlock = '';
+    let resourceBlock = '';
+
+    if (infra.cloud === 'AWS') {
+      providerBlock = 'provider "aws" {\n  region = "us-east-1"\n}';
+      resourceBlock = 'resource "aws_vpc" "main" {\n  cidr_block = "10.0.0.0/16"\n  enable_dns_hostnames = true\n  tags = {\n    Name = "main-vpc"\n  }\n}';
+    } else if (infra.cloud === 'Azure') {
+      providerBlock = 'provider "azurerm" {\n  features {}\n}';
+      resourceBlock = 'resource "azurerm_resource_group" "main" {\n  name     = "app-resources"\n  location = "East US"\n}';
+    } else if (infra.cloud === 'GCP') {
+      providerBlock = 'provider "google" {\n  project = "my-gcp-project"\n  region  = "us-central1"\n}';
+      resourceBlock = 'resource "google_compute_network" "vpc_network" {\n  name = "terraform-network"\n}';
+    } else {
+      providerBlock = 'provider "local" {}';
+      resourceBlock = '# Define platform resources matching your custom cloud configuration here.';
+    }
+
+    parts.push('```hcl');
+    parts.push('# terraform/main.tf');
+    parts.push(providerBlock);
+    parts.push('');
+    parts.push('terraform {');
+    parts.push('  required_version = ">= 1.5.0"');
+    parts.push('  required_providers {');
+    if (infra.cloud === 'AWS') {
+      parts.push('    aws = {\n      source  = "hashicorp/aws"\n      version = "~> 5.0"\n    }');
+    } else if (infra.cloud === 'Azure') {
+      parts.push('    azurerm = {\n      source  = "hashicorp/azurerm"\n      version = "~> 3.0"\n    }');
+    } else if (infra.cloud === 'GCP') {
+      parts.push('    google = {\n      source  = "hashicorp/google"\n      version = "~> 4.0"\n    }');
+    } else {
+      parts.push('    local = {\n      source  = "hashicorp/local"\n      version = "~> 2.0"\n    }');
+    }
+    parts.push('  }');
+    parts.push('}');
+    parts.push('');
+    parts.push(resourceBlock);
+    parts.push('```');
     parts.push('');
   }
 

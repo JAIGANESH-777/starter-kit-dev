@@ -59,8 +59,6 @@ export async function askBackend(projectType, language) {
     message: 'Backend features: (space to select, enter to skip)',
     choices: [
       { name: 'Health check endpoints (required for Docker)', value: 'Health Checks' },
-      { name: 'Structured request logging (Pino / Winston / Loguru)', value: 'Structured Logging' },
-      { name: 'Swagger / OpenAPI docs', value: 'Swagger/OpenAPI Docs' },
       { name: 'Rate limiting', value: 'Rate Limiting' },
       { name: 'Redis cache layer', value: 'Redis Caching' },
       { name: 'Background jobs / queues (BullMQ / Celery)', value: 'Background Queues' },
