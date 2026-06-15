@@ -832,6 +832,37 @@ function buildInfra({ infra, frontend, backend, database, auth, language }) {
 
     // FIX: Embed the fully dynamic compose template, scoped to what was actually selected.
     parts.push(buildDockerCompose({ frontend, backend, database, auth, infra }));
+
+    if (infra.dockerFeatures && infra.dockerFeatures.includes('.dockerignore')) {
+      parts.push('### .dockerignore Templates');
+      parts.push('Configure `.dockerignore` files to prevent transferring large directories like `node_modules` and local environment files during Docker builds.');
+      parts.push('');
+      if (backend.hasBackend) {
+        parts.push('#### backend/.dockerignore');
+        parts.push('```text');
+        parts.push('node_modules');
+        parts.push('npm-debug.log');
+        parts.push('dist');
+        parts.push('.env');
+        parts.push('.env.development');
+        parts.push('.env.production');
+        parts.push('```');
+        parts.push('');
+      }
+      if (frontend.hasFrontend) {
+        parts.push('#### frontend/.dockerignore');
+        parts.push('```text');
+        parts.push('node_modules');
+        parts.push('.next');
+        parts.push('out');
+        parts.push('npm-debug.log');
+        parts.push('.env.local');
+        parts.push('.env.development.local');
+        parts.push('.env.production.local');
+        parts.push('```');
+        parts.push('');
+      }
+    }
   }
 
   if (infra.hasCICD && infra.cicdSteps.length > 0) {
@@ -1390,7 +1421,14 @@ function buildBackendTreeLines(backend, database, auth, infra, language) {
     L.push('│   ├── tsconfig.json');
   }
 
-  if (infra.hasDocker) L.push('│   └── Dockerfile');
+  if (infra.hasDocker) {
+    if (infra.dockerFeatures && infra.dockerFeatures.includes('.dockerignore')) {
+      L.push('│   ├── Dockerfile');
+      L.push('│   └── .dockerignore');
+    } else {
+      L.push('│   └── Dockerfile');
+    }
+  }
 
   return L;
 }
@@ -1496,7 +1534,14 @@ function buildFrontendTreeLines(frontend, auth, infra) {
     L.push('    └── tsconfig.json');
   }
 
-  if (infra.hasDocker) L.push('    └── Dockerfile');
+  if (infra.hasDocker) {
+    if (infra.dockerFeatures && infra.dockerFeatures.includes('.dockerignore')) {
+      L.push('    ├── Dockerfile');
+      L.push('    └── .dockerignore');
+    } else {
+      L.push('    └── Dockerfile');
+    }
+  }
 
   return L;
 }
@@ -1665,7 +1710,8 @@ function buildScaffoldInstructions(answers) {
     '',
     `6. **Docker Orchestration** *(${infra.hasDocker ? 'enabled' : 'skipped'})*`,
     infra.hasDocker
-      ? `   - Copy the \`docker-compose.yml\` template from Section 6 **verbatim** to the project root.\n   - Do not rename services, change internal hostnames, or alter port mappings.\n   - Write multi-stage Dockerfiles: frontend \`EXPOSE 3000\`, backend \`EXPOSE 8000\`.`
+      ? `   - Copy the \`docker-compose.yml\` template from Section 6 **verbatim** to the project root.\n   - Do not rename services, change internal hostnames, or alter port mappings.\n   - Write multi-stage Dockerfiles: frontend \`EXPOSE 3000\`, backend \`EXPOSE 8000\`.` +
+        (infra.dockerFeatures && infra.dockerFeatures.includes('.dockerignore') ? `\n   - Write \`.dockerignore\` files for both backend and frontend as detailed in Section 6 to ignore \`node_modules\`, environment files, and build outputs.` : '')
       : '   _Skipped._',
     '',
     `7. **CI/CD** *(${infra.hasCICD ? `${infra.cicdPlatform} — ${list(infra.cicdSteps)}` : 'skipped'})*`,
