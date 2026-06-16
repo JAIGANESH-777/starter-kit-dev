@@ -82,7 +82,64 @@ The compiler outputs a custom, AI-readable `SPEC.md` directly into the current d
 ### 2. Instruct Your AI Agent
 Copy the generated `SPEC.md`, `shared_tokens.md`, `CLAUDE.md`, `ACCELERATOR_SPEC.md`, and the custom `agents/skills/` guidelines into your target directory. Then, hand over instructions to your AI coding agent (e.g., Claude Code, Cursor, or Codex) with a prompt like:
 
-> *"Read CLAUDE.md, SPEC.md, ACCELERATOR_SPEC.md, and shared_tokens.md completely. Reference the agents/skills/ directory. Bootstrap the backend/ and frontend/ folders in this project directory following the exact scaffold pipeline in SPEC.md."*
+
+### PROMPT
+> *"Read these four files completely before writing any code, in this order:
+
+1. ACCELERATOR_SPEC.md — meta-rules for how this scaffolding system works
+2. CLAUDE.md — your operating guardrails for this specific build
+3. SPEC.md — this project's actual stack choices, output by the CLI compiler
+4. shared_tokens.md — the only valid source for colors, typography, spacing, radii
+
+Do not start scaffolding until all four are read. If any of them conflict with each other on 
+something load-bearing, stop and ask me rather than picking a winner yourself.
+
+SPEC.md Section 8 is the literal, final directory structure — copy it, don't redesign or rename 
+anything in it. SPEC.md Section 9 is the scaffold pipeline — execute it in the order given, do not 
+reorder or skip steps even if a later step looks faster to do first.
+
+Use agents/skills/ as a phase-by-phase playbook. Open the matching skill BEFORE starting each phase:
+accelerator-scaffolder (bootstrap) → db-migration (schema) → api-contract (routes/controllers/DTOs) 
+→ frontend-design + state-ssr (UI/state) → security-hardening (auth/CORS/cookies) → devops-cloud 
+(Docker/CI) → tdd (write tests for each vertical slice as you build it, not after). Only open 
+stack-doctor if something actually breaks post-scaffold.
+
+These rules override SPEC.md if SPEC.md ever contradicts them:
+
+1. (L-2) Backend first. Implement GET /api/health and confirm 
+   `curl http://localhost:8000/api/health` returns 200 { status: "ok" } before touching frontend/.
+2. (W-4) Every color/spacing/type value comes from shared_tokens.md — no invented values — and HEX 
+   colors convert to HSL when wired into tailwind.config.ts (or framework equivalent).
+3. (C-1) Frontend listens on 3000, backend on 8000. Container-to-container calls use service 
+   hostnames (http://backend:8000) — never localhost inside a Docker container. Browser-side calls 
+   use http://localhost:8000.
+4. (C-2) Any Prisma + Postgres connection string uses postgresql://, with a runtime guard that 
+   rewrites postgres:// to postgresql:// if an env var supplies the old prefix.
+5. If SPEC.md Section 5 has Multi-Tenant: Yes, register tenant scoping globally at bootstrap using 
+   the pattern that matches the chosen backend: NestJS → APP_INTERCEPTOR with TenantInterceptor in 
+   app.module.ts providers; Express/Fastify/Hono → app.use(tenantMiddleware) before all routes, plus 
+   @CurrentTenant() on tenant-scoped controllers; FastAPI → a get_tenant_id dependency that extracts 
+   tenant_id from headers/claims and scopes the DB session; Django → TenantMiddleware using 
+   thread-local/context vars plus a custom Model Manager that auto-filters by tenant_id. Every single 
+   DB query touching tenant data must be scoped to the active tenant — no exceptions, no "just this 
+   one admin query." If the selected backend matches none of the above, stop and ask me rather than 
+   inventing a pattern.
+6. Build a distinct UI for every auth method listed in Section 5 — don't default everything to 
+   email/password. Magic Link = email input + send button only. OTP/SMS = phone input → separate 
+   6-digit code step. OAuth = branded provider button per provider.
+7. Never hardcode secrets — only .env.example. Never modify the root docker-compose.yml directly; 
+   use the generated service config from Section 6 as-is.
+
+Pull logo.svg, logo-mark.svg, and favicon.ico from assets/ into the frontend — don't generate 
+placeholders. Apply tokens via CSS variables only, with a visible theme toggle switching 
+data-theme="light"/"dark" on the root element.
+
+Before calling the scaffold done, verify: the health check passes, frontend boots with zero 
+hydration warnings, the database is reachable through the configured ORM, tenant-scoped queries 
+actually filter by tenant_id (spot-check at least one), and `docker-compose up` brings up the full 
+stack with no manual intervention."*
+
+
 
 ### 3. Let the Agent Scaffold & Validate
 The agent will build out the vertical slices step-by-step. The process follows strict guidelines to ensure quality, security, and consistent styling.

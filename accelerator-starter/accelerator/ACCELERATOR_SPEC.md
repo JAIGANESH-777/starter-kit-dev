@@ -51,7 +51,7 @@ project-root/
     │   └── terraform/      ← Terraform IaC modules
     │
     └── agents/             # Instructions and custom skills for AI coding agents
-        └── skills/         # 8 custom skills (api-contract, db-migration, devops-cloud, etc.)
+        └── skills/         # 9 custom skills (api-contract, db-migration, devops-cloud, etc.)
 ```
 
 ---
@@ -106,8 +106,8 @@ Every section with an opt-in `confirm` gate can be skipped — the renderer hand
 | 5 | Auth | Strategy, providers, env vars, RBAC roles, multi-tenant flag |
 | 6 | Infrastructure | Cloud, Docker ports, CI/CD pipeline steps, code quality config hints |
 | 7 | Testing | Framework, test types, coverage thresholds |
-| **9** | **Directory Structure** | **Exact folder tree derived from all selections** |
-| 10 | Scaffold Instructions | Numbered pipeline with skip labels, critical rules |
+| 8 | Directory Structure | Exact folder tree derived from all selections |
+| 9 | Scaffold Instructions | Numbered pipeline with skip labels, critical rules |
 
 ---
 
@@ -129,15 +129,15 @@ The generated `SPEC.md` instructs the AI to create this root layout:
 └── docker-compose.yml ← if Docker selected
 ```
 
-The full tree (with nested files per framework) is rendered in **Section 9** of the generated SPEC.
+The full tree (with nested files per framework) is rendered in **Section 8** of the generated SPEC.
 
 ---
 
 ## AI Agent Rules (applied to any project using this kit)
 
 1. Read `CLAUDE.md`, `SPEC.md`, and `shared_tokens.md` completely before writing any code.
-2. Follow the **Section 9 directory structure** exactly — do not invent folders.
-3. Follow the **Section 10 scaffold pipeline** in order — do not skip or reorder steps.
+2. Follow the **Section 8 directory structure** exactly — do not invent folders.
+3. Follow the **Section 9 scaffold pipeline** in order — do not skip or reorder steps.
 4. Use assets from `./assets/`. Apply the design tokens from `shared_tokens.md`.
 5. Create `backend/` and `frontend/` as specified. Never merge them.
 6. **Never hardcode secrets** — use `.env.example` and environment variables.
@@ -145,6 +145,8 @@ The full tree (with nested files per framework) is rendered in **Section 9** of 
 8. **L-2 Rule**: implement and verify `GET /api/health` returns HTTP 200 before any frontend code.
 9. Do not modify the root `docker-compose.yml` directly — use the generated service config.
 10. Frontend must expose port 3000, backend must expose port 8000.
+11. **Multi-Tenant Rule**: If multi-tenancy is active, register global tenant scoping at app bootstrap (guards, interceptors, middleware) and ensure every DB query is filtered by the resolved `tenantId`.
+12. **Auth UI Rule**: Implement a distinct UI form/flow for every selected authentication method (e.g. Google OAuth branded button, magic link email-only input, or two-step OTP/SMS flow) — never fallback to simple email+password forms for all methods.
 
 ---
 
