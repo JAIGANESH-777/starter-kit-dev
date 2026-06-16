@@ -117,7 +117,7 @@ function buildBackend({ backend, auth, database, language }) {
   const extrasBlock = backend.backendExtras.length > 0
     ? `\n### Features Enabled\n${bullet(backend.backendExtras)}\n` : '';
 
-  // FIX: Framework-specific module pattern — must match Section 9 directory tree exactly.
+  // FIX: Framework-specific module pattern — must match Section 8 directory tree exactly.
   // NestJS uses module-based architecture; Express/Fastify/Hono use routes-based architecture.
   const isNestJS   = backend.framework === 'NestJS';
   const isDjango   = backend.framework === 'Django';
@@ -534,7 +534,9 @@ function buildAuth({ auth, projectType }) {
     ? '\n### Multi-Tenant Interceptor Registration (mandatory)\n' +
       '- **NestJS**: add `{ provide: APP_INTERCEPTOR, useClass: TenantInterceptor }` to the `providers` array in `app.module.ts`. Import `APP_INTERCEPTOR` from `@nestjs/core`.\n' +
       '- **Express / Fastify / Hono**: register `tenantMiddleware` **before** all route handlers in `server.ts` — `app.use(tenantMiddleware)`.\n' +
-      '- Apply `@CurrentTenant()` decorator in every controller or resolver that queries tenant-scoped data.\n' +
+      '- **FastAPI**: implement a `get_tenant_id` dependency to retrieve `tenant_id` from the `X-Tenant-ID` header or JWT claims, and filter SQLAlchemy database queries.\n' +
+      '- **Django**: register a `TenantMiddleware` that extracts `tenant_id` and stores it in thread-local storage/context vars, and subclass `TenantModel` using a custom manager to auto-filter queries by `tenant_id`.\n' +
+      '- Apply `@CurrentTenant()` decorator (or equivalent framework dependency/middleware extraction) in every controller or resolver that queries tenant-scoped data.\n' +
       '- Every DB query touching tenant data **must** be scoped to `tenantId`. A query without a tenant scope is a critical security bug.\n'
     : '';
 
@@ -1654,7 +1656,7 @@ function buildDirectoryTree(answers) {
   L.push('```');
 
   return [
-    '## 9. Project Directory Structure',
+    '## 8. Project Directory Structure',
     '',
     'The agent **must** scaffold the repository using exactly this folder layout.',
     'Do not invent directories or deviate from this structure without explicit instruction.',
@@ -1669,13 +1671,13 @@ function buildDirectoryTree(answers) {
   ].join('\n');
 }
 
-// ── Scaffold instructions (section 10) ───────────────────────────────────────
+// ── Scaffold instructions (section 9) ───────────────────────────────────────
 
 function buildScaffoldInstructions(answers) {
   const { frontend, backend, database, auth, infra, quality } = answers;
 
   return [
-    '## 10. AI Scaffold Instructions',
+    '## 9. AI Scaffold Instructions',
     '',
     'You are an expert full-stack systems engineering agent.',
     'Read `CLAUDE.md`, `SPEC.md`, and `shared_tokens.md` **completely** before writing a single line of code.',
@@ -1731,7 +1733,7 @@ function buildScaffoldInstructions(answers) {
     '- Never hardcode secrets — use environment variables exclusively.',
     '- Never use `localhost` as a hostname inside Docker containers — use service names.',
     '- Follow the L-2 rule: backend `/health` endpoint verified before any frontend code is written.',
-    '- Follow Section 9 directory structure exactly.',
+    '- Follow Section 8 directory structure exactly.',
     '- For Docker: copy the compose template from Section 6 verbatim — do not invent or remove services.',
   ].filter((l) => l !== false).join('\n');
 }
@@ -1746,7 +1748,6 @@ export function renderSpec(answers) {
     buildDatabase(answers),
     buildAuth(answers),
     buildInfra(answers),
-    buildDockerCompose(answers),
     buildQuality(answers),
     buildDirectoryTree(answers),
     buildScaffoldInstructions(answers),
