@@ -608,8 +608,6 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
   L.push('The agent **must not** modify service names, internal hostnames, or port mappings.');
   L.push('');
   L.push('```yaml');
-  L.push("version: '3.9'");
-  L.push('');
   L.push('services:');
 
   // ── Database services ──────────────────────────────────────────────────────
@@ -743,10 +741,9 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
     L.push(`    command: ${backendStartCmd}`);
     L.push('    ports:');
     L.push("      - '8000:8000'");
+    L.push('    env_file:');
+    L.push('      - ./backend/.env');
     L.push('    environment:');
-    L.push('      - PORT=8000');
-    L.push('      - JWT_SECRET=change-me-in-production');
-    L.push('      - ALLOWED_ORIGINS=http://localhost:3000');
     if (hasPostgres) L.push('      - DATABASE_URL=postgresql://postgres:postgres@db:5432/appdb');
     if (hasMySQL)    L.push('      - DATABASE_URL=mysql://appuser:apppassword@db:3306/appdb');
     if (hasMongo)    L.push('      - DATABASE_URL=mongodb://mongo:27017/appdb');
@@ -772,11 +769,18 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
     L.push('  frontend:');
     L.push('    build:');
     L.push('      context: ./frontend');
+    if (frontend.framework.includes('Next.js')) {
+      L.push('      args:');
+      L.push('        - NEXT_PUBLIC_API_URL_INTERNAL=http://backend:8000');
+    }
     L.push('    container_name: app_frontend');
     L.push('    ports:');
     L.push("      - '3000:3000'");
     L.push('    environment:');
     L.push(`      - ${apiUrlVar}=http://backend:8000/api`);
+    if (frontend.framework.includes('Next.js')) {
+      L.push('      - NEXT_PUBLIC_API_URL_INTERNAL=http://backend:8000');
+    }
     if (backend.hasBackend) {
       L.push('    depends_on:');
       L.push('      - backend');
@@ -1456,7 +1460,10 @@ function buildFrontendTreeLines(frontend, auth, infra) {
     }
     L.push('    │   └── (dashboard)/');
     L.push('    │       ├── layout.tsx');
-    L.push('    │       └── page.tsx');
+    L.push('    │       └── dashboard/');
+    L.push('    │           ├── page.tsx');
+    L.push('    │           └── users/');
+    L.push('    │               └── page.tsx');
     L.push('    ├── components/');
     L.push('    │   ├── ui/');
     L.push('    │   ├── layouts/');
@@ -1735,6 +1742,11 @@ function buildScaffoldInstructions(answers) {
     '- Follow the L-2 rule: backend `/health` endpoint verified before any frontend code is written.',
     '- Follow Section 8 directory structure exactly.',
     '- For Docker: copy the compose template from Section 6 verbatim — do not invent or remove services.',
+    '- For container self-healthchecks (e.g. Dockerfile `HEALTHCHECK` command), use `127.0.0.1` instead of `localhost` to ensure successful IPv4 loopback resolution in Alpine Linux environments.',
+    '- For package installation: when writing Dockerfiles or running dependency installations, always use `npm ci --legacy-peer-deps` and `npm prune --omit=dev --legacy-peer-deps` to prevent peer dependency resolution conflicts.',
+    '- For NestJS/TypeScript backends: explicitly define `"rootDir": "src"` and `"incremental": false` under `"compilerOptions"` in `tsconfig.build.json` (and exclude config files like `vitest.config.ts`) to ensure the compiled JS goes straight to `dist/` (not nested inside `dist/src/`) and build caching issues are avoided inside containers.',
+    '- For OAuth authentication: ensure NestJS/Passport strategies (like Google, Azure AD, GitHub, etc.) check for empty environment variables and fall back to dummy/placeholder strings (e.g. \'dummy-google-client-id\', \'dummy-azure-client-id\') during construction to prevent the server from crashing on boot in local development.',
+    '- For Next.js rewrites: when proxying `/api` or `/api/auth` to the backend, resolve the target URL using `process.env.NEXT_PUBLIC_API_URL_INTERNAL || (isDocker ? \'http://backend:8000\' : \'http://localhost:8000\')` (where `isDocker` is checked via `fs.existsSync(\'/.dockerenv\')`) so that rewrites work correctly during both local host development and container-internal build stages.',
   ].filter((l) => l !== false).join('\n');
 }
 
