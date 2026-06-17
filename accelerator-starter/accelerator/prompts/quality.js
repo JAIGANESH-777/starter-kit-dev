@@ -11,16 +11,16 @@ export async function askQuality(language) {
     message: 'Primary testing framework:',
     choices: language === 'Python'
       ? [
-          { name: 'pytest — standard Python testing (recommended)', value: 'pytest' },
-          { name: 'None', value: 'None' },
-        ]
+        { name: 'pytest — standard Python testing (recommended)', value: 'pytest' },
+        { name: 'None', value: 'None' },
+      ]
       : [
-          { name: 'Vitest — fast, ESM-native, Vite-integrated (recommended)', value: 'Vitest' },
-          { name: 'Jest — mature, widely used', value: 'Jest' },
-          { name: 'Cypress — E2E browser testing, component testing', value: 'Cypress' },
-          { name: 'Playwright — cross-browser E2E automation', value: 'Playwright' },
-          { name: 'None', value: 'None' },
-        ],
+        { name: 'Vitest — fast, ESM-native, Vite-integrated (recommended)', value: 'Vitest' },
+        { name: 'Jest — mature, widely used', value: 'Jest' },
+        { name: 'Cypress — E2E browser testing, component testing', value: 'Cypress' },
+        { name: 'Playwright — cross-browser E2E automation', value: 'Playwright' },
+        { name: 'None', value: 'None' },
+      ],
   });
 
   if (testingFramework === 'None') {

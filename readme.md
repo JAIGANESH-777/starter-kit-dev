@@ -113,7 +113,7 @@ These rules override SPEC.md if SPEC.md ever contradicts them:
 3. (C-1) Frontend listens on 3000, backend on 8000. Container-to-container calls use service 
    hostnames (http://backend:8000) — never localhost inside a Docker container. Browser-side calls 
    use http://localhost:8000.
-4. (C-2) Any Prisma + Postgres connection string uses postgresql://, with a runtime guard that 
+4. (C-2) (Applicable only if using Prisma + Postgres) Any Prisma + Postgres connection string uses postgresql://, with a runtime guard that 
    rewrites postgres:// to postgresql:// if an env var supplies the old prefix.
 5. If SPEC.md Section 5 has Multi-Tenant: Yes, register tenant scoping globally at bootstrap using 
    the pattern that matches the chosen backend: NestJS → APP_INTERCEPTOR with TenantInterceptor in 
@@ -163,5 +163,5 @@ Every AI agent and developer working in this workspace must adhere to the follow
 > The frontend container process must expose and listen on port `3000`. The backend container process must expose and listen on port `8000`. Inter-container calls must use service hosts (e.g., `http://backend:8000/api`), whereas client-side browser calls use `http://localhost:8000/api`.
 
 > [!WARNING]
-> **C-2 Database Connection Rule**
-> When using Prisma with a PostgreSQL container, the schema connection protocol MUST use `postgresql://` (e.g., `postgresql://postgres:postgres@db:5432/appdb`). Using `postgres://` causes Prisma configuration compilation to fail. Write a runtime handler to replace the protocol prefix if environment variables pass it down with `postgres://`.
+> **C-2 Database Connection Rule (Prisma + PostgreSQL only)**
+> When using Prisma with a PostgreSQL container, the schema connection protocol MUST use postgresql:// (e.g., postgresql://postgres:postgres@db:5432/appdb). Using postgres:// causes Prisma configuration compilation to fail. Write a runtime handler to replace the protocol prefix if environment variables pass it down with postgres://.

@@ -13,6 +13,10 @@ Read `SPEC.md`, `ACCELERATOR_SPEC.md`, and `shared_tokens.md` completely before 
 - **Do NOT rewrite or modify** the root `docker-compose.yml` — copy and use the dynamically generated configuration from Section 6 of the SPEC.
 - Keep all secrets in `.env.example` — never hardcode credentials.
 - Never use `localhost` as a hostname inside Docker containers — use service names (`db`, `backend`).
+- **FastAPI / Python OAuth Session Requirements**: If using OAuth auth methods with FastAPI/Starlette, always install `itsdangerous` in `requirements.txt` and register `SessionMiddleware` from `starlette.middleware.sessions` in `app/main.py` using `settings.JWT_SECRET` as the secret key.
+- **Pydantic Validation Dependencies**: If using Pydantic v2 validation with `EmailStr` fields, always add `email-validator` to `requirements.txt`.
+- **HTTPX Client Testing Requirements**: If using `pytest` with `httpx` async test client, use `ASGITransport(app=app)` instead of directly passing `app` to `AsyncClient` to remain compliant with HTTPX 0.28+ APIs.
+- **SQLite Async Testing Dependencies**: If using async SQLAlchemy with in-memory SQLite (`sqlite+aiosqlite:///:memory:`) for testing, always add `aiosqlite` to `requirements.txt`.
 - If `Multi-Tenant: Yes` in SPEC Section 5 — register global tenant scoping at app bootstrap. NestJS: `{ provide: APP_INTERCEPTOR, useClass: TenantInterceptor }` in `app.module.ts` providers. Express/Fastify/Hono: `app.use(tenantMiddleware)` before all route handlers and apply `@CurrentTenant()`. FastAPI: use a `get_tenant_id` dependency to extract `tenant_id` from headers/claims and scope database sessions. Django: add `TenantMiddleware` with thread-local storage/context vars, and use a custom Model Manager to auto-filter queries by `tenant_id`. Every DB query touching tenant data MUST be scoped to the active tenant ID.
 - Implement **every auth method** listed in SPEC Section 5 with its own distinct UI — do not default to email/password for all methods. Magic Link → email input + "Send Magic Link" button only; OTP/SMS → phone input → 6-digit code two-step form; OAuth → branded provider button.
 

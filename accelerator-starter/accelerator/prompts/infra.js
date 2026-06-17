@@ -1,7 +1,7 @@
 import { select, checkbox, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 
-export async function askInfra() {
+export async function askInfra(language = 'TypeScript') {
   console.log(chalk.bold.white('\n── 🚀 Infrastructure & DevOps ──────────────────────\n'));
 
   const cloud = await select({
@@ -39,7 +39,7 @@ export async function askInfra() {
   // ── CI/CD ───────────────────────────────────────────────────────────────────
   const hasCICD = await confirm({ message: 'Include CI/CD pipeline?' });
   let cicdPlatform = null;
-  let cicdSteps = [];
+  let cicdSteps    = [];
   if (hasCICD) {
     cicdPlatform = await select({
       message: 'CI/CD platform:',
@@ -52,35 +52,52 @@ export async function askInfra() {
       ],
     });
 
+    // CI steps — language-aware so Python projects don't see "Build" (no compile step)
+    const ciStepChoices = [
+      { name: language === 'Python' ? 'Lint (Ruff)' : 'Lint (ESLint / Ruff)', value: 'Lint' },
+      { name: language === 'Python' ? 'Type check (mypy)' : 'Type check (tsc / mypy)', value: 'Type check' },
+      { name: 'Unit tests', value: 'Unit tests' },
+      { name: 'E2E tests', value: 'E2E tests' },
+      // Python has no build step (source is deployed directly)
+      ...(language !== 'Python' ? [{ name: 'Build', value: 'Build' }] : []),
+      { name: 'Docker build & push', value: 'Docker build & push' },
+      { name: 'Deploy to staging', value: 'Deploy staging' },
+      { name: 'Deploy to production (manual approval)', value: 'Deploy production' },
+    ];
+
     cicdSteps = await checkbox({
       message: 'Pipeline steps: (space to select)',
-      choices: [
-        { name: 'Lint (ESLint / Ruff)', value: 'Lint' },
-        { name: 'Type check (tsc / mypy)', value: 'Type check' },
-        { name: 'Unit tests', value: 'Unit tests' },
-        { name: 'E2E tests', value: 'E2E tests' },
-        { name: 'Build', value: 'Build' },
-        { name: 'Docker build & push', value: 'Docker build & push' },
-        { name: 'Deploy to staging', value: 'Deploy staging' },
-        { name: 'Deploy to production (manual approval)', value: 'Deploy production' },
-      ],
+      choices: ciStepChoices,
     });
   }
 
-  // ── Code Quality ────────────────────────────────────────────────────────────
+  // ── Code Quality ─────────────────────────────────────────────────────────────
+  // Scoped to language: Python projects get Python linting/formatting tools;
+  // TypeScript projects get JS/TS tooling. Mixing them pollutes the generated SPEC.
   console.log(chalk.bold.white('\n── 🧹 Code Quality & Developer Tooling ─────────────\n'));
+
+  const codeQualityChoices = language === 'Python'
+    ? [
+        { name: 'Ruff — fast Python linter + formatter (replaces Flake8 + isort + Black)', value: 'Ruff' },
+        { name: 'Black — opinionated Python code formatter', value: 'Black' },
+        { name: 'mypy — static type checker for Python', value: 'mypy' },
+        { name: 'pre-commit — git hooks (runs Ruff/Black/mypy before commits)', value: 'pre-commit' },
+        { name: 'SonarQube / SonarCloud (static analysis)', value: 'SonarQube' },
+        { name: 'EditorConfig', value: 'EditorConfig' },
+      ]
+    : [
+        { name: 'ESLint (linting)', value: 'ESLint' },
+        { name: 'Prettier (formatting)', value: 'Prettier' },
+        { name: 'Husky (git hooks)', value: 'Husky' },
+        { name: 'lint-staged (run linters on staged files)', value: 'lint-staged' },
+        { name: 'Commitlint (conventional commits)', value: 'Commitlint' },
+        { name: 'SonarQube / SonarCloud (static analysis)', value: 'SonarQube' },
+        { name: 'EditorConfig', value: 'EditorConfig' },
+      ];
 
   const codeQuality = await checkbox({
     message: 'Code quality tools: (space to select, enter to skip)',
-    choices: [
-      { name: 'ESLint (linting)', value: 'ESLint' },
-      { name: 'Prettier (formatting)', value: 'Prettier' },
-      { name: 'Husky (git hooks)', value: 'Husky' },
-      { name: 'lint-staged (run linters on staged files)', value: 'lint-staged' },
-      { name: 'Commitlint (conventional commits)', value: 'Commitlint' },
-      { name: 'SonarQube / SonarCloud (static analysis)', value: 'SonarQube' },
-      { name: 'EditorConfig', value: 'EditorConfig' },
-    ],
+    choices: codeQualityChoices,
   });
 
   // ── Additional infra extras ─────────────────────────────────────────────────
