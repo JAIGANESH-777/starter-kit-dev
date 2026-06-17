@@ -21,6 +21,20 @@ function formatDate(iso) {
   });
 }
 
+// BUG FIX: DATABASE_URL was hardcoded to postgresql:// in Section 3 regardless of DB choice.
+// This helper derives the correct URL prefix from the databases actually selected.
+function buildDatabaseUrl(database) {
+  if (!database || !database.hasDatabase || !database.databases) {
+    return 'DATABASE_URL=';
+  }
+  const dbs = database.databases;
+  if (dbs.includes('MySQL'))                                               return 'DATABASE_URL=mysql://user:password@localhost:3306/appdb';
+  if (dbs.includes('MongoDB'))                                             return 'DATABASE_URL=mongodb://localhost:27017/appdb';
+  if (dbs.some((d) => ['PostgreSQL', 'PlanetScale', 'Supabase'].includes(d))) return 'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/appdb';
+  if (dbs.includes('SQLite'))                                              return 'DATABASE_URL=file:./dev.db';
+  return 'DATABASE_URL=';
+}
+
 // ── Section builders ─────────────────────────────────────────────────────────
 
 function buildOverview({ projectName, projectType, language, description, generatedAt }) {
@@ -162,6 +176,13 @@ function buildBackend({ backend, auth, database, language }) {
       extrasInstructionLines.push('- Install: `@nestjs/cache-manager cache-manager ioredis`');
       extrasInstructionLines.push('- Create `src/cache/cache.module.ts` — register `CacheModule.registerAsync()` configured from `REDIS_URL`.');
       extrasInstructionLines.push('- Import `CacheModule` (global: true) in `app.module.ts`.');
+    } else if (isFastAPI) {
+      extrasInstructionLines.push('- Install: `redis`');
+      extrasInstructionLines.push('- Create `backend/app/core/redis.py` — export a singleton async Redis client (`redis.asyncio`) initialized from `REDIS_URL`.');
+      extrasInstructionLines.push('- Import and use the Redis client in routers and services.');
+    } else if (isDjango) {
+      extrasInstructionLines.push('- Install: `django-redis`');
+      extrasInstructionLines.push('- Configure the `CACHES` setting in `backend/settings.py` using `django_redis.cache.RedisCache` pointed to `REDIS_URL`.');
     } else {
       extrasInstructionLines.push('- Install: `ioredis`');
       extrasInstructionLines.push('- Create `src/lib/redis.ts` — export a singleton `ioredis` client initialized from `REDIS_URL`.');
@@ -169,33 +190,60 @@ function buildBackend({ backend, auth, database, language }) {
     }
   }
   if (backend.backendExtras.includes('Background Queues')) {
-    extrasInstructionLines.push('#### Background Queues (BullMQ)');
-    if (isNestJS) {
-      extrasInstructionLines.push('- Install: `@nestjs/bullmq bullmq`');
-      extrasInstructionLines.push('- Create `src/queues/queues.module.ts` — register `BullModule.forRootAsync()` using `REDIS_URL`.');
-      extrasInstructionLines.push("- Create `src/queues/example.processor.ts` with `@Processor('example')` decorator and at least one `@Process()` handler.");
-      extrasInstructionLines.push('- Import `QueuesModule` in `app.module.ts`.');
+    if (language === 'Python') {
+      extrasInstructionLines.push('#### Background Queues (Celery)');
+      if (isFastAPI) {
+        extrasInstructionLines.push('- Install: `celery`');
+        extrasInstructionLines.push('- Create `backend/app/core/celery_app.py` — initialize a `Celery` instance configured with `REDIS_URL` as broker and result backend.');
+        extrasInstructionLines.push('- Create `backend/app/tasks/example.py` — define tasks using `@celery_app.task`.');
+      } else if (isDjango) {
+        extrasInstructionLines.push('- Install: `celery`');
+        extrasInstructionLines.push('- Create `backend/celery.py` and configure celery app integration in `backend/__init__.py` and settings.');
+        extrasInstructionLines.push('- Create `apps/tasks.py` within apps for Celery shared tasks.');
+      }
     } else {
-      extrasInstructionLines.push('- Install: `bullmq`');
-      extrasInstructionLines.push('- Create `src/queues/worker.ts` — initialize a `Worker` from `bullmq` using `REDIS_URL`.');
-      extrasInstructionLines.push('- Create `src/queues/producer.ts` — export a `Queue` instance for enqueueing jobs.');
+      extrasInstructionLines.push('#### Background Queues (BullMQ)');
+      if (isNestJS) {
+        extrasInstructionLines.push('- Install: `@nestjs/bullmq bullmq`');
+        extrasInstructionLines.push('- Create `src/queues/queues.module.ts` — register `BullModule.forRootAsync()` using `REDIS_URL`.');
+        extrasInstructionLines.push("- Create `src/queues/example.processor.ts` with `@Processor('example')` decorator and at least one `@Process()` handler.");
+        extrasInstructionLines.push('- Import `QueuesModule` in `app.module.ts`.');
+      } else {
+        extrasInstructionLines.push('- Install: `bullmq`');
+        extrasInstructionLines.push('- Create `src/queues/worker.ts` — initialize a `Worker` from `bullmq` using `REDIS_URL`.');
+        extrasInstructionLines.push('- Create `src/queues/producer.ts` — export a `Queue` instance for enqueueing jobs.');
+      }
     }
   }
   if (backend.backendExtras.includes('Redis Caching') || backend.backendExtras.includes('Background Queues')) {
     extrasInstructionLines.push('#### Redis Connection Resilience');
-    extrasInstructionLines.push('- **Auto-Reconnect**: Configure client options to automatically reconnect when connection is dropped (e.g. in `ioredis` set `retryStrategy` option).');
+    if (language === 'Python') {
+      extrasInstructionLines.push('- **Auto-Reconnect**: Configure client options or connection pool settings to automatically retry connections on drop (e.g. using `retry_on_timeout=True` or Celery broker reconnect settings).');
+    } else {
+      extrasInstructionLines.push('- **Auto-Reconnect**: Configure client options to automatically reconnect when connection is dropped (e.g. in `ioredis` set `retryStrategy` option).');
+    }
   }
   if (backend.backendExtras.includes('WebSockets')) {
     extrasInstructionLines.push('#### WebSockets');
-    if (isNestJS) {
-      extrasInstructionLines.push('- Install: `@nestjs/websockets @nestjs/platform-socket.io socket.io`');
-      extrasInstructionLines.push('- Create `src/gateway/app.gateway.ts` decorated with `@WebSocketGateway({ cors: true })`.');
-      extrasInstructionLines.push('- Implement `afterInit`, `handleConnection`, `handleDisconnect` lifecycle hooks and at least one `@SubscribeMessage()` handler.');
-      extrasInstructionLines.push('- Register the gateway in `src/gateway/gateway.module.ts` and import in `app.module.ts`.');
+    if (language === 'Python') {
+      if (isFastAPI) {
+        extrasInstructionLines.push('- Install: `websockets` (if needed for client, but FastAPI has native `WebSocket` support)');
+        extrasInstructionLines.push('- Create `backend/app/routers/websocket.py` — implement a WebSocket endpoint (`@router.websocket("/ws")`) managing connections and broadcasting messages.');
+      } else if (isDjango) {
+        extrasInstructionLines.push('- Install: `channels daphne`');
+        extrasInstructionLines.push('- Configure Daphne as ASGI server and set up routing/consumers in `backend/routing.py`.');
+      }
     } else {
-      extrasInstructionLines.push('- Install: `socket.io`');
-      extrasInstructionLines.push('- Create `src/gateway/socket.ts` — attach a Socket.IO server to the HTTP server instance and export the `io` object.');
-      extrasInstructionLines.push('- Import `io` in route handlers to emit events as needed.');
+      if (isNestJS) {
+        extrasInstructionLines.push('- Install: `@nestjs/websockets @nestjs/platform-socket.io socket.io`');
+        extrasInstructionLines.push('- Create `src/gateway/app.gateway.ts` decorated with `@WebSocketGateway({ cors: true })`.');
+        extrasInstructionLines.push('- Implement `afterInit`, `handleConnection`, `handleDisconnect` lifecycle hooks and at least one `@SubscribeMessage()` handler.');
+        extrasInstructionLines.push('- Register the gateway in `src/gateway/gateway.module.ts` and import in `app.module.ts`.');
+      } else {
+        extrasInstructionLines.push('- Install: `socket.io`');
+        extrasInstructionLines.push('- Create `src/gateway/socket.ts` — attach a Socket.IO server to the HTTP server instance and export the `io` object.');
+        extrasInstructionLines.push('- Import `io` in route handlers to emit events as needed.');
+      }
     }
   }
   if (backend.backendExtras.includes('Email Service')) {
@@ -302,7 +350,7 @@ function buildBackend({ backend, auth, database, language }) {
     '',
     '```env',
     '# backend/.env',
-    'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/appdb',
+    buildDatabaseUrl(database),
     'JWT_SECRET=change-me-in-production',
     `PORT=8000${extraEnvVars}`,
     '```',
@@ -336,22 +384,44 @@ function buildBackend({ backend, auth, database, language }) {
 function buildDatabase({ database }) {
   if (!database.hasDatabase) return '## 4. Database\n_No database included._\n\n---\n\n';
 
-  const hasSQLite  = database.databases.includes('SQLite');
+  const hasSQLite   = database.databases.includes('SQLite');
+  // BUG FIX: MySQL was incorrectly grouped inside the Postgres check.
+  // MySQL and PostgreSQL are distinct engines with different images, ports, and env vars.
   const hasPostgres = database.databases.some((d) =>
-    ['PostgreSQL', 'MySQL', 'PlanetScale', 'Supabase'].includes(d));
-  const hasMongo   = database.databases.includes('MongoDB');
+    ['PostgreSQL', 'PlanetScale', 'Supabase'].includes(d));
+  const hasMySQL    = database.databases.includes('MySQL');
+  const hasMongo    = database.databases.includes('MongoDB');
 
+  // BUG FIX: connFix must reflect the actual selected DB engine, not just the ORM.
+  // Django ORM with MySQL needs mysqlclient/PyMySQL, not dj-database-url for PostgreSQL.
   let connFix = '- Use the standard connection URL format for your database driver.';
-  if (database.orm === 'Prisma')
+  if (database.orm === 'Prisma') {
     connFix = '- **C-2 FIX**: Use `postgresql://` (not `postgres://`) in `DATABASE_URL` — Prisma rejects the shorter prefix.';
-  else if (database.orm === 'SQLAlchemy')
-    connFix = '- Use `postgresql+asyncpg://` for async SQLAlchemy, `postgresql://` for sync.';
-  else if (database.orm === 'Django ORM')
-    connFix = '- Configure via `dj-database-url` or the `DATABASES` dict in `settings.py`.';
-  else if (database.orm === 'TypeORM')
-    connFix = '- Use `type: "postgres"` in `DataSource` config; set `synchronize: false` in production.';
-  else if (database.orm === 'Drizzle ORM')
+  } else if (database.orm === 'SQLAlchemy') {
+    if (hasMySQL) {
+      connFix = '- Use `mysql+aiomysql://` for async SQLAlchemy with MySQL, `mysql+mysqlclient://` for sync.';
+    } else {
+      connFix = '- Use `postgresql+asyncpg://` for async SQLAlchemy, `postgresql://` for sync.';
+    }
+  } else if (database.orm === 'Tortoise ORM') {
+    if (hasMySQL) {
+      connFix = '- Use `mysql://user:pass@host:3306/dbname` format in `TORTOISE_ORM` config. Install `aiomysql` driver.';
+    } else {
+      connFix = '- Use `postgres://user:pass@host:5432/dbname` format in `TORTOISE_ORM` config. Install `asyncpg` driver.';
+    }
+  } else if (database.orm === 'Django ORM') {
+    if (hasMySQL) {
+      connFix = '- Configure via `dj-database-url` or `DATABASES` dict in `settings.py`. Install `mysqlclient` (recommended) or `PyMySQL` as the MySQL driver. Use `mysql://` URL scheme.';
+    } else {
+      connFix = '- Configure via `dj-database-url` or the `DATABASES` dict in `settings.py`. Install `psycopg2-binary` as the PostgreSQL driver.';
+    }
+  } else if (database.orm === 'TypeORM') {
+    connFix = hasMySQL
+      ? '- Use `type: "mysql"` in `DataSource` config; set `synchronize: false` in production.'
+      : '- Use `type: "postgres"` in `DataSource` config; set `synchronize: false` in production.';
+  } else if (database.orm === 'Drizzle ORM') {
     connFix = '- Use `drizzle-kit push` for dev, `drizzle-kit generate` + `migrate` for production.';
+  }
 
   const migrationCmd = database.orm === 'Prisma'
     ? '`npx prisma migrate dev` (dev) / `npx prisma migrate deploy` (prod)'
@@ -361,15 +431,24 @@ function buildDatabase({ database }) {
     ? '`npm run typeorm migration:run`'
     : database.orm === 'Django ORM'
     ? '`python manage.py makemigrations && python manage.py migrate`'
-    : database.orm === 'SQLAlchemy'
+    : database.orm === 'SQLAlchemy' || database.orm === 'Tortoise ORM'
     ? '`alembic upgrade head`'
     : '_No ORM migration tool — manage manually_';
 
-  const dbImage = hasMongo ? 'mongo:7' : 'postgres:16-alpine';
-  const dbEnv = hasPostgres
-    ? 'POSTGRES_DB: appdb\n      POSTGRES_USER: postgres\n      POSTGRES_PASSWORD: postgres'
-    : 'MONGO_INITDB_DATABASE: appdb';
-  const dbPort = hasMongo ? '27017:27017' : '5432:5432';
+  // BUG FIX: Section 4 Docker snippet must use the correct image for the selected DB engine.
+  // Previously MySQL always got postgres:16-alpine because MySQL was inside the hasPostgres group.
+  const dbImage = hasMongo   ? 'mongo:7'
+                : hasMySQL   ? 'mysql:8'
+                : hasPostgres ? 'postgres:16-alpine'
+                : 'postgres:16-alpine'; // SQLite has no container but show a reference
+
+  const dbEnv = hasMongo
+    ? 'MONGO_INITDB_DATABASE: appdb'
+    : hasMySQL
+    ? 'MYSQL_DATABASE: appdb\n      MYSQL_ROOT_PASSWORD: rootpassword\n      MYSQL_USER: appuser\n      MYSQL_PASSWORD: apppassword'
+    : 'POSTGRES_DB: appdb\n      POSTGRES_USER: postgres\n      POSTGRES_PASSWORD: postgres';
+
+  const dbPort = hasMongo ? '27017:27017' : hasMySQL ? '3306:3306' : '5432:5432';
 
   let prismaConnGuard = '';
   if (database.orm === 'Prisma') {
@@ -509,8 +588,10 @@ function buildAuth({ auth, projectType }) {
   // Per-method frontend UI requirements — agents must implement a distinct UI for each, not just email+password.
   const authUIRules = auth.authMethods.map((method) => {
     switch (method) {
-      case 'Email + Password':
-        return '- **Email + Password**: email input + password input + submit button. Include a "Forgot password?" link.';
+      // BUG FIX: The checkbox value in auth.js is 'Email/Password' (with a slash),
+      // not 'Email + Password' (with a plus). The case must match the actual emitted value.
+      case 'Email/Password':
+        return '- **Email/Password**: email input + password input + submit button. Include a "Forgot password?" link.';
       case 'Magic Link':
         return '- **Magic Link**: single email input + "Send Magic Link" button only. On submit, replace form with: "Check your inbox for a sign-in link." No password field.';
       case 'OTP / SMS':
@@ -723,9 +804,17 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
     } else if (backend.framework === 'Django') {
       backendStartCmd = 'sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"';
     } else if (backend.framework === 'FastAPI') {
-      backendStartCmd = database.hasDatabase && database.orm === 'SQLAlchemy'
-        ? 'sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"'
-        : 'uvicorn app.main:app --host 0.0.0.0 --port 8000';
+      // BUG FIX: All ORM migration steps must run before uvicorn starts.
+      // Previously only SQLAlchemy had a migration step; Django ORM fell through to plain uvicorn.
+      if (database.hasDatabase && database.orm === 'SQLAlchemy') {
+        backendStartCmd = 'sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"';
+      } else if (database.hasDatabase && database.orm === 'Tortoise ORM') {
+        backendStartCmd = 'sh -c "aerich upgrade && uvicorn app.main:app --host 0.0.0.0 --port 8000"';
+      } else if (database.hasDatabase && database.orm === 'Django ORM') {
+        backendStartCmd = 'sh -c "python manage.py migrate && uvicorn app.main:app --host 0.0.0.0 --port 8000"';
+      } else {
+        backendStartCmd = 'uvicorn app.main:app --host 0.0.0.0 --port 8000';
+      }
     } else if (['Express.js', 'Fastify', 'Hono'].includes(backend.framework)) {
       backendStartCmd = database.hasDatabase && database.orm === 'Prisma'
         ? 'sh -c "npx prisma migrate deploy && npm run start"'
@@ -777,9 +866,17 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
     L.push('    ports:');
     L.push("      - '3000:3000'");
     L.push('    environment:');
-    L.push(`      - ${apiUrlVar}=http://backend:8000/api`);
-    if (frontend.framework.includes('Next.js')) {
+    if (frontend.framework.includes('Nuxt')) {
+      L.push('      - NUXT_PUBLIC_API_URL=http://localhost:8000/api');
+      L.push('      - NUXT_API_URL=http://backend:8000/api');
+    } else if (frontend.framework.includes('Next.js')) {
+      L.push('      - NEXT_PUBLIC_API_URL=http://localhost:8000/api');
       L.push('      - NEXT_PUBLIC_API_URL_INTERNAL=http://backend:8000');
+    } else if (frontend.framework.includes('Svelte')) {
+      L.push('      - PUBLIC_API_URL=http://localhost:8000/api');
+      L.push('      - PRIVATE_API_URL=http://backend:8000/api');
+    } else {
+      L.push(`      - ${apiUrlVar}=http://localhost:8000/api`);
     }
     if (backend.hasBackend) {
       L.push('    depends_on:');
@@ -846,12 +943,26 @@ function buildInfra({ infra, frontend, backend, database, auth, language }) {
       if (backend.hasBackend) {
         parts.push('#### backend/.dockerignore');
         parts.push('```text');
-        parts.push('node_modules');
-        parts.push('npm-debug.log');
-        parts.push('dist');
-        parts.push('.env');
-        parts.push('.env.development');
-        parts.push('.env.production');
+        if (language === 'Python') {
+          parts.push('__pycache__/');
+          parts.push('*.py[cod]');
+          parts.push('*$py.class');
+          parts.push('.venv/');
+          parts.push('venv/');
+          parts.push('.pytest_cache/');
+          parts.push('.mypy_cache/');
+          parts.push('.ruff_cache/');
+          parts.push('*.egg-info/');
+          parts.push('.env');
+          parts.push('.env.*');
+        } else {
+          parts.push('node_modules');
+          parts.push('npm-debug.log');
+          parts.push('dist');
+          parts.push('.env');
+          parts.push('.env.development');
+          parts.push('.env.production');
+        }
         parts.push('```');
         parts.push('');
       }
@@ -891,7 +1002,17 @@ function buildInfra({ infra, frontend, backend, database, auth, language }) {
         stepsYaml.push('      - name: Production Build\n        run: ' + (language === 'Python' ? 'echo "No build step required for Python"' : 'npm run build'));
       }
       if (infra.cicdSteps.includes('Docker build & push')) {
-        stepsYaml.push('      - name: Set up Docker Buildx\n        uses: docker/setup-buildx-action@v2\n      - name: Build and Push Docker Image\n        run: |\n          docker build -t app-service:latest .\n          # docker push my-registry/app-service:latest');
+        let dockerBuildCmd = '';
+        if (backend.hasBackend && frontend.hasFrontend) {
+          dockerBuildCmd = '          docker build -t backend-service:latest ./backend\n          docker build -t frontend-service:latest ./frontend';
+        } else if (backend.hasBackend) {
+          dockerBuildCmd = '          docker build -t backend-service:latest ./backend';
+        } else if (frontend.hasFrontend) {
+          dockerBuildCmd = '          docker build -t frontend-service:latest ./frontend';
+        } else {
+          dockerBuildCmd = '          docker build -t app-service:latest .';
+        }
+        stepsYaml.push('      - name: Set up Docker Buildx\n        uses: docker/setup-buildx-action@v2\n      - name: Build Docker Images\n        run: |\n' + dockerBuildCmd);
       }
       if (infra.cicdSteps.includes('Deploy staging')) {
         stepsYaml.push('      - name: Deploy to Staging\n        run: echo "Deploying to staging environment..."');
@@ -967,16 +1088,26 @@ function buildInfra({ infra, frontend, backend, database, auth, language }) {
     parts.push('### Code Quality Tools');
     parts.push(bullet(infra.codeQuality));
     parts.push('');
+    // BUG FIX: Python projects now select Ruff/Black/mypy/pre-commit instead of ESLint/Prettier/Husky.
+    // The notes block must emit the correct config instructions per tool, not assume JS/TS tooling.
     const notes = [
+      // TypeScript / JS tools
       infra.codeQuality.includes('ESLint') && '- **ESLint**: `eslint.config.mjs` (flat config). Use `@typescript-eslint/recommended` + framework plugin.',
       infra.codeQuality.includes('Prettier') && '- **Prettier**: `.prettierrc` → `{ "singleQuote": true, "semi": true, "printWidth": 100 }`.',
       infra.codeQuality.includes('Husky') && '- **Husky**: `npx husky init` → add `pre-commit` (lint-staged) and `commit-msg` (commitlint) hooks.',
       infra.codeQuality.includes('lint-staged') && '- **lint-staged**: in `package.json` → run ESLint + Prettier on staged `*.ts` / `*.tsx` files.',
       infra.codeQuality.includes('Commitlint') && '- **Commitlint**: `@commitlint/config-conventional` + commit-msg Husky hook.',
+      // Python tools
+      infra.codeQuality.includes('Ruff') && '- **Ruff**: `pyproject.toml` → `[tool.ruff]` section. Run `ruff check . --fix` for linting and `ruff format .` for formatting. Replaces Flake8, isort, and Black in a single tool.',
+      infra.codeQuality.includes('Black') && '- **Black**: `pyproject.toml` → `[tool.black]` with `line-length = 100`. Run `black .` to format. Skip if using Ruff (Ruff formatter is a superset of Black).',
+      infra.codeQuality.includes('mypy') && '- **mypy**: `pyproject.toml` → `[tool.mypy]` section. Run `mypy .` for static type analysis. Set `strict = true` progressively.',
+      infra.codeQuality.includes('pre-commit') && '- **pre-commit**: `.pre-commit-config.yaml` at project root. Add hooks for Ruff, Black, and mypy. Run `pre-commit install` after cloning.',
+      // Universal tools
       infra.codeQuality.includes('SonarQube') && '- **SonarQube**: `sonar-project.properties` at root. Set `sonar.sources`, `sonar.tests`, coverage exclusions.',
     ].filter(Boolean);
     if (notes.length > 0) parts.push(...notes, '');
 
+    // ── JS/TS quality tool config snippets ───────────────────────────────────
     if (infra.codeQuality.includes('ESLint')) {
       parts.push('#### eslint.config.mjs (ESLint Flat Config)');
       parts.push('```javascript');
@@ -1031,6 +1162,65 @@ function buildInfra({ infra, frontend, backend, database, auth, language }) {
       parts.push('    ]');
       parts.push('  }');
       parts.push('}');
+      parts.push('```');
+      parts.push('');
+    }
+    // ── Python quality tool config snippets ───────────────────────────────────
+    if (infra.codeQuality.includes('Ruff') || infra.codeQuality.includes('Black') || infra.codeQuality.includes('mypy')) {
+      parts.push('#### pyproject.toml (Python tool configuration)');
+      parts.push('```toml');
+      if (infra.codeQuality.includes('Ruff')) {
+        parts.push('[tool.ruff]');
+        parts.push('line-length = 100');
+        parts.push('target-version = "py311"');
+        parts.push('select = ["E", "F", "I", "B", "UP"]  # pycodestyle + pyflakes + isort + bugbear + pyupgrade');
+        parts.push('');
+        parts.push('[tool.ruff.format]');
+        parts.push('quote-style = "double"');
+        parts.push('indent-style = "space"');
+        parts.push('');
+      }
+      if (infra.codeQuality.includes('Black')) {
+        parts.push('[tool.black]');
+        parts.push('line-length = 100');
+        parts.push('target-version = ["py311"]');
+        parts.push('');
+      }
+      if (infra.codeQuality.includes('mypy')) {
+        parts.push('[tool.mypy]');
+        parts.push('python_version = "3.11"');
+        parts.push('strict = false');
+        parts.push('ignore_missing_imports = true');
+        parts.push('');
+      }
+      parts.push('```');
+      parts.push('');
+    }
+    if (infra.codeQuality.includes('pre-commit')) {
+      parts.push('#### .pre-commit-config.yaml (Python git hooks)');
+      parts.push('```yaml');
+      parts.push('repos:');
+      if (infra.codeQuality.includes('Ruff')) {
+        parts.push('  - repo: https://github.com/astral-sh/ruff-pre-commit');
+        parts.push('    rev: v0.4.4');
+        parts.push('    hooks:');
+        parts.push('      - id: ruff');
+        parts.push('        args: [--fix]');
+        parts.push('      - id: ruff-format');
+      }
+      if (infra.codeQuality.includes('Black') && !infra.codeQuality.includes('Ruff')) {
+        parts.push('  - repo: https://github.com/psf/black');
+        parts.push('    rev: 24.4.2');
+        parts.push('    hooks:');
+        parts.push('      - id: black');
+      }
+      if (infra.codeQuality.includes('mypy')) {
+        parts.push('  - repo: https://github.com/pre-commit/mirrors-mypy');
+        parts.push('    rev: v1.10.0');
+        parts.push('    hooks:');
+        parts.push('      - id: mypy');
+        parts.push('        additional_dependencies: [types-all]');
+      }
       parts.push('```');
       parts.push('');
     }

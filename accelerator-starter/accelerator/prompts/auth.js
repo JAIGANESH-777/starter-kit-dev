@@ -1,7 +1,7 @@
 import { select, checkbox, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 
-export async function askAuth(projectType, language) {
+export async function askAuth(projectType, language, backendFramework = '') {
   if (projectType === 'frontend') {
     return { hasAuth: false };
   }
@@ -34,30 +34,54 @@ export async function askAuth(projectType, language) {
     validate: (selected) => selected.length > 0 || 'Select at least one auth method.',
   });
 
-  // Provider choices scoped to language and framework context
+  // ── Auth implementation library — scoped by language AND backendFramework ────
+  // This prevents incompatible choices such as Django Auth in a FastAPI project
+  // or Auth.js (Next.js-specific) in an Express backend.
   let authProvider;
+
   if (language === 'Python') {
-    authProvider = await select({
-      message: 'Auth implementation:',
-      choices: [
-        { name: 'Custom FastAPI (python-jose + passlib) — recommended', value: 'Custom FastAPI Jose/Passlib' },
-        { name: 'Django contrib.auth (Django projects only)', value: 'Django Auth' },
-        { name: 'Authlib (OAuth / OIDC flows)', value: 'Authlib' },
-      ],
-    });
+    if (backendFramework === 'Django') {
+      // Django projects: django.contrib.auth is the natural built-in.
+      // Authlib is valid for OAuth flows alongside Django.
+      authProvider = await select({
+        message: 'Auth implementation:',
+        choices: [
+          { name: 'Django contrib.auth — built-in, recommended for Django', value: 'Django Auth' },
+          { name: 'Authlib — OAuth 2.0 / OIDC flows (works with Django)', value: 'Authlib' },
+        ],
+      });
+    } else {
+      // FastAPI (or any other Python backend):
+      // Django Auth is excluded — it requires Django middleware stack.
+      authProvider = await select({
+        message: 'Auth implementation:',
+        choices: [
+          { name: 'Custom FastAPI (python-jose + passlib) — recommended', value: 'Custom FastAPI Jose/Passlib' },
+          { name: 'Authlib — OAuth 2.0 / OIDC flows (works with FastAPI)', value: 'Authlib' },
+        ],
+      });
+    }
   } else {
-    authProvider = await select({
-      message: 'Auth library / provider:',
-      choices: [
-        { name: 'Auth.js / NextAuth.js (recommended for Next.js)', value: 'Auth.js' },
-        { name: 'Passport.js (recommended for NestJS / Express)', value: 'Passport.js' },
-        { name: 'Clerk — managed auth, zero backend auth code', value: 'Clerk' },
-        { name: 'Supabase Auth — if using Supabase DB', value: 'Supabase Auth' },
-        { name: 'AWS Cognito — if deploying on AWS', value: 'AWS Cognito' },
-        { name: 'Keycloak — self-hosted identity server', value: 'Keycloak' },
-        { name: 'Custom (in-house handlers)', value: 'Custom' },
-      ],
-    });
+    // TypeScript / JavaScript backends
+    // Filter provider choices by backendFramework where applicable.
+    const tsProviderChoices = [
+      // Auth.js is designed for Next.js fullstack and SvelteKit; not a fit for API-only backends.
+      ...(backendFramework === '' || ['NestJS', 'Express.js', 'Fastify', 'Hono'].includes(backendFramework)
+        ? [{ name: 'Passport.js (recommended for NestJS / Express / Fastify)', value: 'Passport.js' }]
+        : []),
+      // Auth.js: best fit for Next.js or SvelteKit (fullstack meta-frameworks).
+      // Still show for API-only but with a clear note.
+      { name: 'Auth.js / NextAuth.js (best for Next.js fullstack)', value: 'Auth.js' },
+      { name: 'Clerk — managed auth, zero backend auth code', value: 'Clerk' },
+      // Supabase Auth only makes sense when Supabase DB is also selected; show universally
+      // since the user may have already confirmed Supabase DB.
+      { name: 'Supabase Auth — if using Supabase DB', value: 'Supabase Auth' },
+      // Cloud-provider specific options
+      { name: 'AWS Cognito — if deploying on AWS', value: 'AWS Cognito' },
+      { name: 'Keycloak — self-hosted identity server', value: 'Keycloak' },
+      { name: 'Custom (in-house handlers)', value: 'Custom' },
+    ];
+    authProvider = await select({ message: 'Auth library / provider:', choices: tsProviderChoices });
   }
 
   const hasRBAC = await confirm({ message: 'Include Role-Based Access Control (RBAC)?' });
@@ -76,7 +100,9 @@ export async function askAuth(projectType, language) {
     });
   }
 
-  const hasMultiTenant = await confirm({ message: 'Multi-tenant architecture? (separate data per organisation/team)' });
+  const hasMultiTenant = await confirm({
+    message: 'Multi-tenant architecture? (separate data per organisation/team)',
+  });
 
   return { hasAuth, authStrategy, authMethods, authProvider, hasRBAC, roles, hasMultiTenant };
 }

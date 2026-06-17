@@ -11,10 +11,17 @@ export async function runPrompts() {
   const { projectType, language } = basics;
 
   const frontend = await askFrontend(projectType);
-  const backend = await askBackend(projectType, language);
-  const database = await askDatabase(projectType, language);
-  const auth = await askAuth(projectType, language);
-  const infra = await askInfra();
+  const backend  = await askBackend(projectType, language);
+
+  // Pass backend.framework downstream so database + auth can filter
+  // incompatible options (e.g. Django ORM when FastAPI is selected).
+  const backendFramework = backend.hasBackend ? backend.framework : '';
+
+  const database = await askDatabase(projectType, language, backendFramework);
+  const auth     = await askAuth(projectType, language, backendFramework);
+
+  // Pass language so infra can show Python vs JS/TS code-quality tools.
+  const infra   = await askInfra(language);
   const quality = await askQuality(language);
 
   return {
