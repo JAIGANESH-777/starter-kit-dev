@@ -364,20 +364,6 @@ function buildBackend({ backend, auth, database, language }) {
     ? '# Validate environment variables using pydantic-settings or custom checks\nfrom pydantic_settings import BaseSettings\n\nclass Settings(BaseSettings):\n    DATABASE_URL: str\n    JWT_SECRET: str\n    PORT: int = 8000\n\n    class Config:\n        env_file = ".env"\n\nsettings = Settings()'
     : '// Validate environment variables at startup using Zod or Envalid\nimport { cleanEnv, str, port } from "envalid";\n\nexport const env = cleanEnv(process.env, {\n  DATABASE_URL: str(),\n  JWT_SECRET: str(),\n  PORT: port({ default: 8000 }),\n});';
 
-  // FIX-A: DATABASE_URL must match the DB actually selected in Section 4.
-  // buildBackend receives `database` so we can inspect the real choice here.
-  const dbUrlDefault = (() => {
-    if (!database || !database.hasDatabase) return 'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/appdb';
-    if (database.databases.includes('MySQL') || database.databases.includes('PlanetScale'))
-      return 'DATABASE_URL=mysql://user:password@localhost:3306/appdb';
-    if (database.databases.includes('MongoDB'))
-      return 'DATABASE_URL=mongodb://localhost:27017/appdb';
-    if (database.databases.includes('SQLite'))
-      return 'DATABASE_URL=sqlite:///./dev.db';
-    // Supabase uses PostgreSQL under the hood
-    return 'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/appdb';
-  })();
-
   return [
     '## 3. Backend',
     '',
@@ -391,11 +377,7 @@ function buildBackend({ backend, auth, database, language }) {
     '',
     '```env',
     '# backend/.env',
-<<<<<<< HEAD
     buildDatabaseUrl(database),
-=======
-    dbUrlDefault,
->>>>>>> a42d349 (feat(accelerator): fix multi-stack compatibility issues and add python-async-patterns skill)
     'JWT_SECRET=change-me-in-production',
     `PORT=8000${extraEnvVars}`,
     '```',
@@ -430,31 +412,39 @@ function buildDatabase({ database }) {
   if (!database.hasDatabase) return '## 4. Database\n_No database included._\n\n---\n\n';
 
   const hasSQLite = database.databases.includes('SQLite');
-  // BUG FIX: MySQL was incorrectly grouped inside the Postgres check.
-  // MySQL and PostgreSQL are distinct engines with different images, ports, and env vars.
   const hasPostgres = database.databases.some((d) =>
     ['PostgreSQL', 'PlanetScale', 'Supabase'].includes(d));
   const hasMySQL = database.databases.includes('MySQL');
   const hasMongo = database.databases.includes('MongoDB');
 
-  // BUG FIX: connFix must reflect the actual selected DB engine, not just the ORM.
-  // Django ORM with MySQL needs mysqlclient/PyMySQL, not dj-database-url for PostgreSQL.
   let connFix = '- Use the standard connection URL format for your database driver.';
   if (database.orm === 'Prisma') {
     connFix = '- **C-2 FIX**: Use `postgresql://` (not `postgres://`) in `DATABASE_URL` — Prisma rejects the shorter prefix.';
-<<<<<<< HEAD
   } else if (database.orm === 'SQLAlchemy') {
-    if (hasMySQL) {
+    const _sqlaMysql   = database.databases.some((d) => ['MySQL', 'PlanetScale'].includes(d));
+    const _sqlaSqlite  = database.databases.includes('SQLite');
+    const _sqlaMongo   = database.databases.includes('MongoDB');
+    if (_sqlaMysql) {
       connFix = '- Use `mysql+aiomysql://` for async SQLAlchemy with MySQL, `mysql+mysqlclient://` for sync.';
+    } else if (_sqlaSqlite) {
+      connFix = '- Use `sqlite+aiosqlite:///./dev.db` for async SQLAlchemy with SQLite. No separate DB container needed.';
+    } else if (_sqlaMongo) {
+      connFix = '- SQLAlchemy does not natively support MongoDB. Use Motor (async) or MongoEngine (sync) instead.';
     } else {
       connFix = '- Use `postgresql+asyncpg://` for async SQLAlchemy, `postgresql://` for sync.';
     }
   } else if (database.orm === 'Tortoise ORM') {
-    if (hasMySQL) {
-      connFix = '- Use `mysql://user:pass@host:3306/dbname` format in `TORTOISE_ORM` config. Install `aiomysql` driver.';
+    const _tortoiseMysql = database.databases.some((d) => ['MySQL', 'PlanetScale'].includes(d));
+    const _tortoiseSqlite = database.databases.includes('SQLite');
+    if (_tortoiseMysql) {
+      connFix = '- Use `mysql://user:pass@host:3306/db` as `DATABASE_URL` with Tortoise ORM + asyncmy driver.';
+    } else if (_tortoiseSqlite) {
+      connFix = '- Use `sqlite:///./dev.db` as `DATABASE_URL` with Tortoise ORM.';
     } else {
-      connFix = '- Use `postgres://user:pass@host:5432/dbname` format in `TORTOISE_ORM` config. Install `asyncpg` driver.';
+      connFix = '- Use `postgres://user:pass@host:5432/db` as `DATABASE_URL` with Tortoise ORM + asyncpg driver.';
     }
+  } else if (database.orm === 'Motor') {
+    connFix = '- Motor connects via `AsyncIOMotorClient(MONGO_URL)`. Set `MONGO_URL=mongodb://mongo:27017` and `MONGO_DB=appdb` as separate env vars.';
   } else if (database.orm === 'Django ORM') {
     if (hasMySQL) {
       connFix = '- Configure via `dj-database-url` or `DATABASES` dict in `settings.py`. Install `mysqlclient` (recommended) or `PyMySQL` as the MySQL driver. Use `mysql://` URL scheme.';
@@ -466,36 +456,6 @@ function buildDatabase({ database }) {
       ? '- Use `type: "mysql"` in `DataSource` config; set `synchronize: false` in production.'
       : '- Use `type: "postgres"` in `DataSource` config; set `synchronize: false` in production.';
   } else if (database.orm === 'Drizzle ORM') {
-=======
-  else if (database.orm === 'SQLAlchemy') {
-    // FIX-C: SQLAlchemy connFix must branch on the actual DB chosen, not assume PostgreSQL.
-    const _sqlaMysql   = database.databases.some((d) => ['MySQL', 'PlanetScale'].includes(d));
-    const _sqlaSqlite  = database.databases.includes('SQLite');
-    const _sqlaMongo   = database.databases.includes('MongoDB');
-    if (_sqlaMysql)
-      connFix = '- Use `mysql+aiomysql://` for async SQLAlchemy with MySQL, `mysql+mysqlclient://` for sync.';
-    else if (_sqlaSqlite)
-      connFix = '- Use `sqlite+aiosqlite:///./dev.db` for async SQLAlchemy with SQLite. No separate DB container needed.';
-    else if (_sqlaMongo)
-      connFix = '- SQLAlchemy does not natively support MongoDB. Use Motor (async) or MongoEngine (sync) instead.';
-    else
-      connFix = '- Use `postgresql+asyncpg://` for async SQLAlchemy, `postgresql://` for sync.';
-  } else if (database.orm === 'Tortoise ORM') {
-    const _tortoiseMysql = database.databases.some((d) => ['MySQL', 'PlanetScale'].includes(d));
-    const _tortoiseSqlite = database.databases.includes('SQLite');
-    connFix = _tortoiseMysql
-      ? '- Use `mysql://user:pass@host:3306/db` as `DATABASE_URL` with Tortoise ORM + asyncmy driver.'
-      : _tortoiseSqlite
-      ? '- Use `sqlite:///./dev.db` as `DATABASE_URL` with Tortoise ORM.'
-      : '- Use `postgres://user:pass@host:5432/db` as `DATABASE_URL` with Tortoise ORM + asyncpg driver.';
-  } else if (database.orm === 'Motor') {
-    connFix = '- Motor connects via `AsyncIOMotorClient(MONGO_URL)`. Set `MONGO_URL=mongodb://mongo:27017` and `MONGO_DB=appdb` as separate env vars.';
-  } else if (database.orm === 'Django ORM')
-    connFix = '- Configure via `dj-database-url` or the `DATABASES` dict in `settings.py`.';
-  else if (database.orm === 'TypeORM')
-    connFix = '- Use `type: "postgres"` in `DataSource` config; set `synchronize: false` in production.';
-  else if (database.orm === 'Drizzle ORM')
->>>>>>> a42d349 (feat(accelerator): fix multi-stack compatibility issues and add python-async-patterns skill)
     connFix = '- Use `drizzle-kit push` for dev, `drizzle-kit generate` + `migrate` for production.';
   }
 
@@ -511,7 +471,6 @@ function buildDatabase({ database }) {
             ? '`alembic upgrade head`'
             : '_No ORM migration tool — manage manually_';
 
-<<<<<<< HEAD
   // BUG FIX: Section 4 Docker snippet must use the correct image for the selected DB engine.
   // Previously MySQL always got postgres:16-alpine because MySQL was inside the hasPostgres group.
   const dbImage = hasMongo ? 'mongo:7'
@@ -526,16 +485,6 @@ function buildDatabase({ database }) {
       : 'POSTGRES_DB: appdb\n      POSTGRES_USER: postgres\n      POSTGRES_PASSWORD: postgres';
 
   const dbPort = hasMongo ? '27017:27017' : hasMySQL ? '3306:3306' : '5432:5432';
-=======
-  // FIX-B: dbImage must reflect the actual database selected — not default to postgres for non-Mongo.
-  const dbImage = hasMongo ? 'mongo:7'
-    : hasMySQL ? 'mysql:8'
-    : 'postgres:16-alpine';
-  const dbEnv = hasPostgres
-    ? 'POSTGRES_DB: appdb\n      POSTGRES_USER: postgres\n      POSTGRES_PASSWORD: postgres'
-    : 'MONGO_INITDB_DATABASE: appdb';
-  const dbPort = hasMongo ? '27017:27017' : '5432:5432';
->>>>>>> a42d349 (feat(accelerator): fix multi-stack compatibility issues and add python-async-patterns skill)
 
   let prismaConnGuard = '';
   if (database.orm === 'Prisma') {
