@@ -28,10 +28,10 @@ function buildDatabaseUrl(database) {
     return 'DATABASE_URL=';
   }
   const dbs = database.databases;
-  if (dbs.includes('MySQL'))                                               return 'DATABASE_URL=mysql://user:password@localhost:3306/appdb';
-  if (dbs.includes('MongoDB'))                                             return 'DATABASE_URL=mongodb://localhost:27017/appdb';
+  if (dbs.includes('MySQL')) return 'DATABASE_URL=mysql://user:password@localhost:3306/appdb';
+  if (dbs.includes('MongoDB')) return 'DATABASE_URL=mongodb://localhost:27017/appdb';
   if (dbs.some((d) => ['PostgreSQL', 'PlanetScale', 'Supabase'].includes(d))) return 'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/appdb';
-  if (dbs.includes('SQLite'))                                              return 'DATABASE_URL=file:./dev.db';
+  if (dbs.includes('SQLite')) return 'DATABASE_URL=file:./dev.db';
   return 'DATABASE_URL=';
 }
 
@@ -65,28 +65,28 @@ function buildFrontend({ frontend, auth }) {
 
   const apiUrlVar = frontend.framework.includes('Vite') ? 'VITE_API_URL'
     : frontend.framework.includes('Nuxt') ? 'NUXT_PUBLIC_API_URL'
-    : frontend.framework.includes('Svelte') ? 'PUBLIC_API_URL'
-    : 'NEXT_PUBLIC_API_URL';
+      : frontend.framework.includes('Svelte') ? 'PUBLIC_API_URL'
+        : 'NEXT_PUBLIC_API_URL';
 
   const extrasBlock = frontend.frontendExtras.length > 0
     ? `\n### Additional Tooling\n${bullet(frontend.frontendExtras)}\n` : '';
 
   const cookieCredentialsBlock = auth && auth.hasAuth
     ? '\n### Cookie Credentials Transmission (mandatory for auth)\n' +
-      '- Set client-side fetching clients to send cookies automatically with requests:\n' +
-      '  - **Axios**: set `axios.defaults.withCredentials = true` globally or pass `{ withCredentials: true }` in Axios instance options.\n' +
-      '  - **Fetch API**: pass `{ credentials: \'include\' }` in options block.\n' +
-      '  - **SWR**: configure the fetcher parameter to pass `{ credentials: \'include\' }`.\n' +
-      '  - **TanStack Query**: configure query/mutation fetch functions to use credentials options.\n'
+    '- Set client-side fetching clients to send cookies automatically with requests:\n' +
+    '  - **Axios**: set `axios.defaults.withCredentials = true` globally or pass `{ withCredentials: true }` in Axios instance options.\n' +
+    '  - **Fetch API**: pass `{ credentials: \'include\' }` in options block.\n' +
+    '  - **SWR**: configure the fetcher parameter to pass `{ credentials: \'include\' }`.\n' +
+    '  - **TanStack Query**: configure query/mutation fetch functions to use credentials options.\n'
     : '';
 
   const initCmd = frontend.framework === 'Next.js'
     ? 'npx create-next-app@latest frontend --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm'
     : frontend.framework === 'React + Vite'
-    ? 'npm create vite@latest frontend -- --template react-ts'
-    : frontend.framework === 'Nuxt 3'
-    ? 'npx nuxi@latest init frontend --packageManager npm --gitInit false'
-    : 'npm create svelte@latest frontend';
+      ? 'npm create vite@latest frontend -- --template react-ts'
+      : frontend.framework === 'Nuxt 3'
+        ? 'npx nuxi@latest init frontend --packageManager npm --gitInit false'
+        : 'npm create svelte@latest frontend';
 
   return [
     '## 2. Frontend',
@@ -133,17 +133,17 @@ function buildBackend({ backend, auth, database, language }) {
 
   // FIX: Framework-specific module pattern — must match Section 8 directory tree exactly.
   // NestJS uses module-based architecture; Express/Fastify/Hono use routes-based architecture.
-  const isNestJS   = backend.framework === 'NestJS';
-  const isDjango   = backend.framework === 'Django';
-  const isFastAPI  = backend.framework === 'FastAPI';
+  const isNestJS = backend.framework === 'NestJS';
+  const isDjango = backend.framework === 'Django';
+  const isFastAPI = backend.framework === 'FastAPI';
 
   const modulePatternHint = isNestJS
     ? `backend/src/{module}/{module}.controller.ts\nbackend/src/{module}/{module}.service.ts\nbackend/src/{module}/{module}.module.ts\nbackend/src/common/          # shared guards, filters, interceptors, pipes\nbackend/src/config/          # environment config module`
     : isDjango
-    ? `backend/apps/{app}/views.py\nbackend/apps/{app}/models.py\nbackend/apps/{app}/serializers.py\nbackend/apps/{app}/urls.py`
-    : isFastAPI
-    ? `backend/app/routers/{resource}.py\nbackend/app/schemas/{resource}.py\nbackend/app/models/{resource}.py\nbackend/app/core/             # config, security, dependencies`
-    : `backend/src/routes/{resource}.ts    # route registration\nbackend/src/controllers/{resource}.ts # request/response handling\nbackend/src/services/{resource}.ts    # business logic\nbackend/src/middleware/              # shared middleware (auth, error, logging)\nbackend/src/config/                  # environment config`;
+      ? `backend/apps/{app}/views.py\nbackend/apps/{app}/models.py\nbackend/apps/{app}/serializers.py\nbackend/apps/{app}/urls.py`
+      : isFastAPI
+        ? `backend/app/routers/{resource}.py\nbackend/app/schemas/{resource}.py\nbackend/app/models/{resource}.py\nbackend/app/core/             # config, security, dependencies`
+        : `backend/src/routes/{resource}.ts    # route registration\nbackend/src/controllers/{resource}.ts # request/response handling\nbackend/src/services/{resource}.ts    # business logic\nbackend/src/middleware/              # shared middleware (auth, error, logging)\nbackend/src/config/                  # environment config`;
 
   // FIX: Emit env vars for selected backend extras — not just list them as bullets.
   const extraEnvLines = new Set();
@@ -172,7 +172,12 @@ function buildBackend({ backend, auth, database, language }) {
   const extrasInstructionLines = [];
   if (backend.backendExtras.includes('Redis Caching')) {
     extrasInstructionLines.push('#### Redis Caching');
-    if (isNestJS) {
+    if (language === 'Python') {
+      // FIX-E (partial): Python Redis caching uses redis.asyncio, not ioredis
+      extrasInstructionLines.push('- Install: `redis`');
+      extrasInstructionLines.push('- Create `backend/app/core/redis.py` — export a singleton async Redis client (`redis.asyncio`) initialized from `REDIS_URL`.');
+      extrasInstructionLines.push('- Import and use the Redis client in routers and services.');
+    } else if (isNestJS) {
       extrasInstructionLines.push('- Install: `@nestjs/cache-manager cache-manager ioredis`');
       extrasInstructionLines.push('- Create `src/cache/cache.module.ts` — register `CacheModule.registerAsync()` configured from `REDIS_URL`.');
       extrasInstructionLines.push('- Import `CacheModule` (global: true) in `app.module.ts`.');
@@ -190,6 +195,7 @@ function buildBackend({ backend, auth, database, language }) {
     }
   }
   if (backend.backendExtras.includes('Background Queues')) {
+<<<<<<< HEAD
     if (language === 'Python') {
       extrasInstructionLines.push('#### Background Queues (Celery)');
       if (isFastAPI) {
@@ -213,6 +219,27 @@ function buildBackend({ backend, auth, database, language }) {
         extrasInstructionLines.push('- Create `src/queues/worker.ts` — initialize a `Worker` from `bullmq` using `REDIS_URL`.');
         extrasInstructionLines.push('- Create `src/queues/producer.ts` — export a `Queue` instance for enqueueing jobs.');
       }
+=======
+    // FIX-E: Background Queues for Python → Celery; for Node → BullMQ
+    if (language === 'Python') {
+      extrasInstructionLines.push('#### Background Queues (Celery)');
+      extrasInstructionLines.push('- Install: `celery redis`');
+      extrasInstructionLines.push('- Create `app/core/celery_app.py` — configure a Celery instance using `REDIS_URL` as broker AND result backend.');
+      extrasInstructionLines.push('- Create `app/tasks/` directory — define task functions decorated with `@celery_app.task(bind=True)`.');
+      extrasInstructionLines.push('- Add a `celery` service to `docker-compose.yml` running: `celery -A app.core.celery_app worker --loglevel=info`');
+      extrasInstructionLines.push('- Example task call: `my_task.delay(arg1, arg2)` from any FastAPI/Django endpoint.');
+    } else if (isNestJS) {
+      extrasInstructionLines.push('#### Background Queues (BullMQ)');
+      extrasInstructionLines.push('- Install: `@nestjs/bullmq bullmq`');
+      extrasInstructionLines.push('- Create `src/queues/queues.module.ts` — register `BullModule.forRootAsync()` using `REDIS_URL`.');
+      extrasInstructionLines.push("- Create `src/queues/example.processor.ts` with `@Processor('example')` decorator and at least one `@Process()` handler.");
+      extrasInstructionLines.push('- Import `QueuesModule` in `app.module.ts`.');
+    } else {
+      extrasInstructionLines.push('#### Background Queues (BullMQ)');
+      extrasInstructionLines.push('- Install: `bullmq`');
+      extrasInstructionLines.push('- Create `src/queues/worker.ts` — initialize a `Worker` from `bullmq` using `REDIS_URL`.');
+      extrasInstructionLines.push('- Create `src/queues/producer.ts` — export a `Queue` instance for enqueueing jobs.');
+>>>>>>> a42d349 (feat(accelerator): fix multi-stack compatibility issues and add python-async-patterns skill)
     }
   }
   if (backend.backendExtras.includes('Redis Caching') || backend.backendExtras.includes('Background Queues')) {
@@ -225,6 +252,7 @@ function buildBackend({ backend, auth, database, language }) {
   }
   if (backend.backendExtras.includes('WebSockets')) {
     extrasInstructionLines.push('#### WebSockets');
+<<<<<<< HEAD
     if (language === 'Python') {
       if (isFastAPI) {
         extrasInstructionLines.push('- Install: `websockets` (if needed for client, but FastAPI has native `WebSocket` support)');
@@ -233,6 +261,27 @@ function buildBackend({ backend, auth, database, language }) {
         extrasInstructionLines.push('- Install: `channels daphne`');
         extrasInstructionLines.push('- Configure Daphne as ASGI server and set up routing/consumers in `backend/routing.py`.');
       }
+=======
+    // FIX-H: FastAPI has native WebSocket support; Django requires channels
+    if (language === 'Python') {
+      if (isFastAPI) {
+        extrasInstructionLines.push('- FastAPI has **native WebSocket support** — no extra package needed.');
+        extrasInstructionLines.push('- Create `app/routers/ws.py` — define routes using `@router.websocket("/ws/{client_id}")`.');
+        extrasInstructionLines.push('- Use `await websocket.accept()`, `await websocket.receive_text()`, `await websocket.send_text()` in handlers.');
+        extrasInstructionLines.push('- For broadcast/pub-sub: use the Redis client from `app/core/redis.py` with `pubsub()` to fan-out messages.');
+      } else if (isDjango) {
+        extrasInstructionLines.push('- Install: `channels channels-redis`');
+        extrasInstructionLines.push('- Add `channels` to `INSTALLED_APPS` in `settings.py`.');
+        extrasInstructionLines.push('- Configure `CHANNEL_LAYERS` with Redis backend in `settings.py`.');
+        extrasInstructionLines.push('- Create `consumers.py` subclassing `AsyncWebsocketConsumer` with `connect`, `disconnect`, `receive` handlers.');
+        extrasInstructionLines.push('- Add WebSocket URL routing in `routing.py` and wrap with `ProtocolTypeRouter` in `asgi.py`.');
+      }
+    } else if (isNestJS) {
+      extrasInstructionLines.push('- Install: `@nestjs/websockets @nestjs/platform-socket.io socket.io`');
+      extrasInstructionLines.push('- Create `src/gateway/app.gateway.ts` decorated with `@WebSocketGateway({ cors: true })`.');
+      extrasInstructionLines.push('- Implement `afterInit`, `handleConnection`, `handleDisconnect` lifecycle hooks and at least one `@SubscribeMessage()` handler.');
+      extrasInstructionLines.push('- Register the gateway in `src/gateway/gateway.module.ts` and import in `app.module.ts`.');
+>>>>>>> a42d349 (feat(accelerator): fix multi-stack compatibility issues and add python-async-patterns skill)
     } else {
       if (isNestJS) {
         extrasInstructionLines.push('- Install: `@nestjs/websockets @nestjs/platform-socket.io socket.io`');
@@ -247,29 +296,48 @@ function buildBackend({ backend, auth, database, language }) {
     }
   }
   if (backend.backendExtras.includes('Email Service')) {
-    extrasInstructionLines.push('#### Email Service (Nodemailer)');
-    extrasInstructionLines.push('- Install: `nodemailer @types/nodemailer`');
-    if (isNestJS) {
-      extrasInstructionLines.push('- Create `src/mail/mail.module.ts` and `src/mail/mail.service.ts`.');
-      extrasInstructionLines.push('- Configure Nodemailer transporter in `MailService` using `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.');
-      extrasInstructionLines.push('- Export `MailModule` globally and import in `app.module.ts`.');
+    // FIX-F: Python uses fastapi-mail / resend, not Nodemailer
+    if (language === 'Python') {
+      extrasInstructionLines.push('#### Email Service (fastapi-mail / Resend)');
+      extrasInstructionLines.push('- Install: `fastapi-mail` (SMTP-based) or `resend` (API-based, recommended for production).');
+      extrasInstructionLines.push('- Create `app/core/mail.py` — configure `FastMail` using `ConnectionConfig` with `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, `MAIL_PORT`, `MAIL_SERVER`, `MAIL_STARTTLS`, `MAIL_SSL_TLS`.');
+      extrasInstructionLines.push('- Inject `FastMail` into route handlers via FastAPI dependency injection.');
+      extrasInstructionLines.push('- Use `MessageSchema` to build the email payload and call `fm.send_message(message, template_name=...)`.');
     } else {
-      extrasInstructionLines.push('- Create `src/lib/mailer.ts` — export a configured Nodemailer transporter using `SMTP_*` env vars.');
-      extrasInstructionLines.push('- Call `transporter.sendMail()` from service functions that need to send emails.');
+      extrasInstructionLines.push('#### Email Service (Nodemailer)');
+      extrasInstructionLines.push('- Install: `nodemailer @types/nodemailer`');
+      if (isNestJS) {
+        extrasInstructionLines.push('- Create `src/mail/mail.module.ts` and `src/mail/mail.service.ts`.');
+        extrasInstructionLines.push('- Configure Nodemailer transporter in `MailService` using `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.');
+        extrasInstructionLines.push('- Export `MailModule` globally and import in `app.module.ts`.');
+      } else {
+        extrasInstructionLines.push('- Create `src/lib/mailer.ts` — export a configured Nodemailer transporter using `SMTP_*` env vars.');
+        extrasInstructionLines.push('- Call `transporter.sendMail()` from service functions that need to send emails.');
+      }
     }
   }
   if (backend.backendExtras.includes('File Uploads')) {
-    extrasInstructionLines.push('#### File Uploads (AWS S3)');
-    extrasInstructionLines.push('- Install: `@aws-sdk/client-s3 @aws-sdk/s3-request-presigner multer @types/multer`');
-    if (isNestJS) {
-      extrasInstructionLines.push('- Create `src/uploads/uploads.module.ts` and `uploads.service.ts`.');
-      extrasInstructionLines.push('- Use `FileInterceptor` from `@nestjs/platform-express` on upload controller endpoints.');
-      extrasInstructionLines.push('- S3 client configured from `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.');
-      extrasInstructionLines.push('- Generate presigned URLs for downloads via `getSignedUrl` from `@aws-sdk/s3-request-presigner`.');
+    // FIX-G: Python uses boto3 + python-multipart, not @aws-sdk + multer
+    if (language === 'Python') {
+      extrasInstructionLines.push('#### File Uploads (AWS S3 via boto3)');
+      extrasInstructionLines.push('- Install: `boto3 python-multipart`');
+      extrasInstructionLines.push('- Create `app/core/s3.py` — initialize a `boto3.client("s3")` from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_S3_BUCKET`.');
+      extrasInstructionLines.push('- In routers, use `File` and `UploadFile` from FastAPI (`from fastapi import File, UploadFile`) to accept multipart file uploads.');
+      extrasInstructionLines.push('- Upload using `s3_client.upload_fileobj(file.file, bucket, key)`.');
+      extrasInstructionLines.push('- Generate presigned download URLs with `s3_client.generate_presigned_url("get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=3600)`.');
     } else {
-      extrasInstructionLines.push('- Create `src/lib/s3.ts` — export an S3 client configured from `AWS_*` env vars.');
-      extrasInstructionLines.push('- Add `multer` middleware in `src/routes/uploads.ts` for multipart form parsing.');
-      extrasInstructionLines.push('- Upload buffer with `PutObjectCommand`; generate presigned URLs with `getSignedUrl`.');
+      extrasInstructionLines.push('#### File Uploads (AWS S3)');
+      extrasInstructionLines.push('- Install: `@aws-sdk/client-s3 @aws-sdk/s3-request-presigner multer @types/multer`');
+      if (isNestJS) {
+        extrasInstructionLines.push('- Create `src/uploads/uploads.module.ts` and `uploads.service.ts`.');
+        extrasInstructionLines.push('- Use `FileInterceptor` from `@nestjs/platform-express` on upload controller endpoints.');
+        extrasInstructionLines.push('- S3 client configured from `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.');
+        extrasInstructionLines.push('- Generate presigned URLs for downloads via `getSignedUrl` from `@aws-sdk/s3-request-presigner`.');
+      } else {
+        extrasInstructionLines.push('- Create `src/lib/s3.ts` — export an S3 client configured from `AWS_*` env vars.');
+        extrasInstructionLines.push('- Add `multer` middleware in `src/routes/uploads.ts` for multipart form parsing.');
+        extrasInstructionLines.push('- Upload buffer with `PutObjectCommand`; generate presigned URLs with `getSignedUrl`.');
+      }
     }
   }
   if (backend.backendExtras.includes('Rate Limiting')) {
@@ -328,14 +396,28 @@ function buildBackend({ backend, auth, database, language }) {
   const backendInitCmd = backend.framework === 'NestJS'
     ? 'npx @nestjs/cli new backend --package-manager npm'
     : backend.framework === 'Django'
-    ? 'mkdir backend && cd backend && python -m venv venv && source venv/bin/activate (or venv\\Scripts\\activate) && pip install django djangorestframework django-environ'
-    : backend.framework === 'FastAPI'
-    ? 'mkdir backend && cd backend && python -m venv venv && source venv/bin/activate (or venv\\Scripts\\activate) && pip install fastapi uvicorn pydantic'
-    : 'mkdir backend && cd backend && npm init -y && npm install typescript @types/node ts-node -D && npx tsc --init';
+      ? 'mkdir backend && cd backend && python -m venv venv && source venv/bin/activate (or venv\\Scripts\\activate) && pip install django djangorestframework django-environ'
+      : backend.framework === 'FastAPI'
+        ? 'mkdir backend && cd backend && python -m venv venv && source venv/bin/activate (or venv\\Scripts\\activate) && pip install fastapi uvicorn pydantic'
+        : 'mkdir backend && cd backend && npm init -y && npm install typescript @types/node ts-node -D && npx tsc --init';
 
   const envValidationSnippet = language === 'Python'
     ? '# Validate environment variables using pydantic-settings or custom checks\nfrom pydantic_settings import BaseSettings\n\nclass Settings(BaseSettings):\n    DATABASE_URL: str\n    JWT_SECRET: str\n    PORT: int = 8000\n\n    class Config:\n        env_file = ".env"\n\nsettings = Settings()'
     : '// Validate environment variables at startup using Zod or Envalid\nimport { cleanEnv, str, port } from "envalid";\n\nexport const env = cleanEnv(process.env, {\n  DATABASE_URL: str(),\n  JWT_SECRET: str(),\n  PORT: port({ default: 8000 }),\n});';
+
+  // FIX-A: DATABASE_URL must match the DB actually selected in Section 4.
+  // buildBackend receives `database` so we can inspect the real choice here.
+  const dbUrlDefault = (() => {
+    if (!database || !database.hasDatabase) return 'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/appdb';
+    if (database.databases.includes('MySQL') || database.databases.includes('PlanetScale'))
+      return 'DATABASE_URL=mysql://user:password@localhost:3306/appdb';
+    if (database.databases.includes('MongoDB'))
+      return 'DATABASE_URL=mongodb://localhost:27017/appdb';
+    if (database.databases.includes('SQLite'))
+      return 'DATABASE_URL=sqlite:///./dev.db';
+    // Supabase uses PostgreSQL under the hood
+    return 'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/appdb';
+  })();
 
   return [
     '## 3. Backend',
@@ -350,7 +432,11 @@ function buildBackend({ backend, auth, database, language }) {
     '',
     '```env',
     '# backend/.env',
+<<<<<<< HEAD
     buildDatabaseUrl(database),
+=======
+    dbUrlDefault,
+>>>>>>> a42d349 (feat(accelerator): fix multi-stack compatibility issues and add python-async-patterns skill)
     'JWT_SECRET=change-me-in-production',
     `PORT=8000${extraEnvVars}`,
     '```',
@@ -384,19 +470,20 @@ function buildBackend({ backend, auth, database, language }) {
 function buildDatabase({ database }) {
   if (!database.hasDatabase) return '## 4. Database\n_No database included._\n\n---\n\n';
 
-  const hasSQLite   = database.databases.includes('SQLite');
+  const hasSQLite = database.databases.includes('SQLite');
   // BUG FIX: MySQL was incorrectly grouped inside the Postgres check.
   // MySQL and PostgreSQL are distinct engines with different images, ports, and env vars.
   const hasPostgres = database.databases.some((d) =>
     ['PostgreSQL', 'PlanetScale', 'Supabase'].includes(d));
-  const hasMySQL    = database.databases.includes('MySQL');
-  const hasMongo    = database.databases.includes('MongoDB');
+  const hasMySQL = database.databases.includes('MySQL');
+  const hasMongo = database.databases.includes('MongoDB');
 
   // BUG FIX: connFix must reflect the actual selected DB engine, not just the ORM.
   // Django ORM with MySQL needs mysqlclient/PyMySQL, not dj-database-url for PostgreSQL.
   let connFix = '- Use the standard connection URL format for your database driver.';
   if (database.orm === 'Prisma') {
     connFix = '- **C-2 FIX**: Use `postgresql://` (not `postgres://`) in `DATABASE_URL` — Prisma rejects the shorter prefix.';
+<<<<<<< HEAD
   } else if (database.orm === 'SQLAlchemy') {
     if (hasMySQL) {
       connFix = '- Use `mysql+aiomysql://` for async SQLAlchemy with MySQL, `mysql+mysqlclient://` for sync.';
@@ -420,35 +507,76 @@ function buildDatabase({ database }) {
       ? '- Use `type: "mysql"` in `DataSource` config; set `synchronize: false` in production.'
       : '- Use `type: "postgres"` in `DataSource` config; set `synchronize: false` in production.';
   } else if (database.orm === 'Drizzle ORM') {
+=======
+  else if (database.orm === 'SQLAlchemy') {
+    // FIX-C: SQLAlchemy connFix must branch on the actual DB chosen, not assume PostgreSQL.
+    const _sqlaMysql   = database.databases.some((d) => ['MySQL', 'PlanetScale'].includes(d));
+    const _sqlaSqlite  = database.databases.includes('SQLite');
+    const _sqlaMongo   = database.databases.includes('MongoDB');
+    if (_sqlaMysql)
+      connFix = '- Use `mysql+aiomysql://` for async SQLAlchemy with MySQL, `mysql+mysqlclient://` for sync.';
+    else if (_sqlaSqlite)
+      connFix = '- Use `sqlite+aiosqlite:///./dev.db` for async SQLAlchemy with SQLite. No separate DB container needed.';
+    else if (_sqlaMongo)
+      connFix = '- SQLAlchemy does not natively support MongoDB. Use Motor (async) or MongoEngine (sync) instead.';
+    else
+      connFix = '- Use `postgresql+asyncpg://` for async SQLAlchemy, `postgresql://` for sync.';
+  } else if (database.orm === 'Tortoise ORM') {
+    const _tortoiseMysql = database.databases.some((d) => ['MySQL', 'PlanetScale'].includes(d));
+    const _tortoiseSqlite = database.databases.includes('SQLite');
+    connFix = _tortoiseMysql
+      ? '- Use `mysql://user:pass@host:3306/db` as `DATABASE_URL` with Tortoise ORM + asyncmy driver.'
+      : _tortoiseSqlite
+      ? '- Use `sqlite:///./dev.db` as `DATABASE_URL` with Tortoise ORM.'
+      : '- Use `postgres://user:pass@host:5432/db` as `DATABASE_URL` with Tortoise ORM + asyncpg driver.';
+  } else if (database.orm === 'Motor') {
+    connFix = '- Motor connects via `AsyncIOMotorClient(MONGO_URL)`. Set `MONGO_URL=mongodb://mongo:27017` and `MONGO_DB=appdb` as separate env vars.';
+  } else if (database.orm === 'Django ORM')
+    connFix = '- Configure via `dj-database-url` or the `DATABASES` dict in `settings.py`.';
+  else if (database.orm === 'TypeORM')
+    connFix = '- Use `type: "postgres"` in `DataSource` config; set `synchronize: false` in production.';
+  else if (database.orm === 'Drizzle ORM')
+>>>>>>> a42d349 (feat(accelerator): fix multi-stack compatibility issues and add python-async-patterns skill)
     connFix = '- Use `drizzle-kit push` for dev, `drizzle-kit generate` + `migrate` for production.';
   }
 
   const migrationCmd = database.orm === 'Prisma'
     ? '`npx prisma migrate dev` (dev) / `npx prisma migrate deploy` (prod)'
     : database.orm === 'Drizzle ORM'
-    ? '`npx drizzle-kit push` (dev) / `npx drizzle-kit generate` then migrate (prod)'
-    : database.orm === 'TypeORM'
-    ? '`npm run typeorm migration:run`'
-    : database.orm === 'Django ORM'
-    ? '`python manage.py makemigrations && python manage.py migrate`'
-    : database.orm === 'SQLAlchemy' || database.orm === 'Tortoise ORM'
-    ? '`alembic upgrade head`'
-    : '_No ORM migration tool — manage manually_';
+      ? '`npx drizzle-kit push` (dev) / `npx drizzle-kit generate` then migrate (prod)'
+      : database.orm === 'TypeORM'
+        ? '`npm run typeorm migration:run`'
+        : database.orm === 'Django ORM'
+          ? '`python manage.py makemigrations && python manage.py migrate`'
+          : database.orm === 'SQLAlchemy' || database.orm === 'Tortoise ORM'
+            ? '`alembic upgrade head`'
+            : '_No ORM migration tool — manage manually_';
 
+<<<<<<< HEAD
   // BUG FIX: Section 4 Docker snippet must use the correct image for the selected DB engine.
   // Previously MySQL always got postgres:16-alpine because MySQL was inside the hasPostgres group.
-  const dbImage = hasMongo   ? 'mongo:7'
-                : hasMySQL   ? 'mysql:8'
-                : hasPostgres ? 'postgres:16-alpine'
-                : 'postgres:16-alpine'; // SQLite has no container but show a reference
+  const dbImage = hasMongo ? 'mongo:7'
+    : hasMySQL ? 'mysql:8'
+      : hasPostgres ? 'postgres:16-alpine'
+        : 'postgres:16-alpine'; // SQLite has no container but show a reference
 
   const dbEnv = hasMongo
     ? 'MONGO_INITDB_DATABASE: appdb'
     : hasMySQL
-    ? 'MYSQL_DATABASE: appdb\n      MYSQL_ROOT_PASSWORD: rootpassword\n      MYSQL_USER: appuser\n      MYSQL_PASSWORD: apppassword'
-    : 'POSTGRES_DB: appdb\n      POSTGRES_USER: postgres\n      POSTGRES_PASSWORD: postgres';
+      ? 'MYSQL_DATABASE: appdb\n      MYSQL_ROOT_PASSWORD: rootpassword\n      MYSQL_USER: appuser\n      MYSQL_PASSWORD: apppassword'
+      : 'POSTGRES_DB: appdb\n      POSTGRES_USER: postgres\n      POSTGRES_PASSWORD: postgres';
 
   const dbPort = hasMongo ? '27017:27017' : hasMySQL ? '3306:3306' : '5432:5432';
+=======
+  // FIX-B: dbImage must reflect the actual database selected — not default to postgres for non-Mongo.
+  const dbImage = hasMongo ? 'mongo:7'
+    : hasMySQL ? 'mysql:8'
+    : 'postgres:16-alpine';
+  const dbEnv = hasPostgres
+    ? 'POSTGRES_DB: appdb\n      POSTGRES_USER: postgres\n      POSTGRES_PASSWORD: postgres'
+    : 'MONGO_INITDB_DATABASE: appdb';
+  const dbPort = hasMongo ? '27017:27017' : '5432:5432';
+>>>>>>> a42d349 (feat(accelerator): fix multi-stack compatibility issues and add python-async-patterns skill)
 
   let prismaConnGuard = '';
   if (database.orm === 'Prisma') {
@@ -613,12 +741,12 @@ function buildAuth({ auth, projectType }) {
   // Multi-tenant interceptor global registration rule
   const multiTenantRegistrationBlock = auth.hasMultiTenant
     ? '\n### Multi-Tenant Interceptor Registration (mandatory)\n' +
-      '- **NestJS**: add `{ provide: APP_INTERCEPTOR, useClass: TenantInterceptor }` to the `providers` array in `app.module.ts`. Import `APP_INTERCEPTOR` from `@nestjs/core`.\n' +
-      '- **Express / Fastify / Hono**: register `tenantMiddleware` **before** all route handlers in `server.ts` — `app.use(tenantMiddleware)`.\n' +
-      '- **FastAPI**: implement a `get_tenant_id` dependency to retrieve `tenant_id` from the `X-Tenant-ID` header or JWT claims, and filter SQLAlchemy database queries.\n' +
-      '- **Django**: register a `TenantMiddleware` that extracts `tenant_id` and stores it in thread-local storage/context vars, and subclass `TenantModel` using a custom manager to auto-filter queries by `tenant_id`.\n' +
-      '- Apply `@CurrentTenant()` decorator (or equivalent framework dependency/middleware extraction) in every controller or resolver that queries tenant-scoped data.\n' +
-      '- Every DB query touching tenant data **must** be scoped to `tenantId`. A query without a tenant scope is a critical security bug.\n'
+    '- **NestJS**: add `{ provide: APP_INTERCEPTOR, useClass: TenantInterceptor }` to the `providers` array in `app.module.ts`. Import `APP_INTERCEPTOR` from `@nestjs/core`.\n' +
+    '- **Express / Fastify / Hono**: register `tenantMiddleware` **before** all route handlers in `server.ts` — `app.use(tenantMiddleware)`.\n' +
+    '- **FastAPI**: implement a `get_tenant_id` dependency to retrieve `tenant_id` from the `X-Tenant-ID` header or JWT claims, and filter SQLAlchemy database queries.\n' +
+    '- **Django**: register a `TenantMiddleware` that extracts `tenant_id` and stores it in thread-local storage/context vars, and subclass `TenantModel` using a custom manager to auto-filter queries by `tenant_id`.\n' +
+    '- Apply `@CurrentTenant()` decorator (or equivalent framework dependency/middleware extraction) in every controller or resolver that queries tenant-scoped data.\n' +
+    '- Every DB query touching tenant data **must** be scoped to `tenantId`. A query without a tenant scope is a critical security bug.\n'
     : '';
 
   return [
@@ -677,9 +805,9 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
 
   const apiUrlVar = !frontend.hasFrontend ? null
     : frontend.framework.includes('Vite') ? 'VITE_API_URL'
-    : frontend.framework.includes('Nuxt') ? 'NUXT_PUBLIC_API_URL'
-    : frontend.framework.includes('Svelte') ? 'PUBLIC_API_URL'
-    : 'NEXT_PUBLIC_API_URL';
+      : frontend.framework.includes('Nuxt') ? 'NUXT_PUBLIC_API_URL'
+        : frontend.framework.includes('Svelte') ? 'PUBLIC_API_URL'
+          : 'NEXT_PUBLIC_API_URL';
 
   const L = [];
 
@@ -799,8 +927,8 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
       backendStartCmd = database.hasDatabase && database.orm === 'Prisma'
         ? 'sh -c "npx prisma migrate deploy && npm run start:prod"'
         : database.hasDatabase && database.orm === 'Drizzle ORM'
-        ? 'sh -c "npx drizzle-kit migrate && npm run start:prod"'
-        : 'npm run start:prod';
+          ? 'sh -c "npx drizzle-kit migrate && npm run start:prod"'
+          : 'npm run start:prod';
     } else if (backend.framework === 'Django') {
       backendStartCmd = 'sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"';
     } else if (backend.framework === 'FastAPI') {
@@ -819,8 +947,8 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
       backendStartCmd = database.hasDatabase && database.orm === 'Prisma'
         ? 'sh -c "npx prisma migrate deploy && npm run start"'
         : database.hasDatabase && database.orm === 'Drizzle ORM'
-        ? 'sh -c "npx drizzle-kit migrate && npm run start"'
-        : 'npm run start';
+          ? 'sh -c "npx drizzle-kit migrate && npm run start"'
+          : 'npm run start';
     }
 
     L.push('  backend:');
@@ -834,9 +962,9 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
     L.push('      - ./backend/.env');
     L.push('    environment:');
     if (hasPostgres) L.push('      - DATABASE_URL=postgresql://postgres:postgres@db:5432/appdb');
-    if (hasMySQL)    L.push('      - DATABASE_URL=mysql://appuser:apppassword@db:3306/appdb');
-    if (hasMongo)    L.push('      - DATABASE_URL=mongodb://mongo:27017/appdb');
-    if (hasRedis)    L.push('      - REDIS_URL=redis://redis:6379/0');
+    if (hasMySQL) L.push('      - DATABASE_URL=mysql://appuser:apppassword@db:3306/appdb');
+    if (hasMongo) L.push('      - DATABASE_URL=mongodb://mongo:27017/appdb');
+    if (hasRedis) L.push('      - REDIS_URL=redis://redis:6379/0');
     if (hasKeycloak) {
       L.push('      - KEYCLOAK_SERVER_URL=http://keycloak:8080');
       L.push('      - KEYCLOAK_REALM=my-realm');
@@ -943,6 +1071,7 @@ function buildInfra({ infra, frontend, backend, database, auth, language }) {
       if (backend.hasBackend) {
         parts.push('#### backend/.dockerignore');
         parts.push('```text');
+        // FIX-D: Language-aware .dockerignore — Python backends have no node_modules or dist.
         if (language === 'Python') {
           parts.push('__pycache__/');
           parts.push('*.py[cod]');
@@ -970,8 +1099,18 @@ function buildInfra({ infra, frontend, backend, database, auth, language }) {
         parts.push('#### frontend/.dockerignore');
         parts.push('```text');
         parts.push('node_modules');
-        parts.push('.next');
-        parts.push('out');
+        // Framework-specific build output dirs
+        if (frontend.framework === 'Nuxt 3') {
+          parts.push('.nuxt');
+          parts.push('.output');
+        } else if (frontend.framework === 'SvelteKit') {
+          parts.push('.svelte-kit');
+          parts.push('build');
+        } else {
+          // Next.js / React+Vite
+          parts.push('.next');
+          parts.push('out');
+        }
         parts.push('npm-debug.log');
         parts.push('.env.local');
         parts.push('.env.development.local');
@@ -1443,25 +1582,25 @@ function buildQuality({ quality }) {
   // Cypress-specific setup instructions — do not skip initialization
   const cypressBlock = quality.testingFramework === 'Cypress'
     ? '\n### Cypress Setup (mandatory — do not skip)\n' +
-      '- Install: `cypress @testing-library/cypress`\n' +
-      '- Initialize with `npx cypress open` on first run to scaffold the `cypress/` directory structure.\n' +
-      '- Create `cypress.config.ts` at the **project root** with `baseUrl` pointing to the frontend dev server (e.g. `http://localhost:3000`).\n' +
-      '- Place E2E test files under `cypress/e2e/` with `.cy.ts` extension.\n' +
-      '- Add custom commands in `cypress/support/commands.ts`.\n' +
-      '- Add to root `package.json`: `"test:e2e": "cypress run"` and `"test:e2e:open": "cypress open"`.\n' +
-      '- **Write at least one smoke test** (`cypress/e2e/app.cy.ts`) that visits the home page and asserts the page loads without error.\n'
+    '- Install: `cypress @testing-library/cypress`\n' +
+    '- Initialize with `npx cypress open` on first run to scaffold the `cypress/` directory structure.\n' +
+    '- Create `cypress.config.ts` at the **project root** with `baseUrl` pointing to the frontend dev server (e.g. `http://localhost:3000`).\n' +
+    '- Place E2E test files under `cypress/e2e/` with `.cy.ts` extension.\n' +
+    '- Add custom commands in `cypress/support/commands.ts`.\n' +
+    '- Add to root `package.json`: `"test:e2e": "cypress run"` and `"test:e2e:open": "cypress open"`.\n' +
+    '- **Write at least one smoke test** (`cypress/e2e/app.cy.ts`) that visits the home page and asserts the page loads without error.\n'
     : '';
 
   // Playwright-specific setup instructions — do not skip initialization
   const playwrightBlock = quality.testingFramework === 'Playwright'
     ? '\n### Playwright Setup (mandatory — do not skip)\n' +
-      '- Install: `@playwright/test`\n' +
-      '- Initialize with `npx playwright install` to download browser binaries (Chromium, Firefox, WebKit).\n' +
-      '- Create `playwright.config.ts` at the **project root** with `baseURL` pointing to the frontend dev server (e.g. `http://localhost:3000`).\n' +
-      '- Place test files under `playwright/` or `tests/` with `.spec.ts` extension.\n' +
-      '- Add to root `package.json`: `"test:e2e": "playwright test"` and `"test:e2e:ui": "playwright test --ui"`.\n' +
-      '- **Write at least one smoke test** (`tests/app.spec.ts`) that navigates to the home page and asserts the title/heading is visible.\n' +
-      '- Configure `reporter: [[\'html\', { open: \'never\' }]]` in `playwright.config.ts` for CI compatibility.\n'
+    '- Install: `@playwright/test`\n' +
+    '- Initialize with `npx playwright install` to download browser binaries (Chromium, Firefox, WebKit).\n' +
+    '- Create `playwright.config.ts` at the **project root** with `baseURL` pointing to the frontend dev server (e.g. `http://localhost:3000`).\n' +
+    '- Place test files under `playwright/` or `tests/` with `.spec.ts` extension.\n' +
+    '- Add to root `package.json`: `"test:e2e": "playwright test"` and `"test:e2e:ui": "playwright test --ui"`.\n' +
+    '- **Write at least one smoke test** (`tests/app.spec.ts`) that navigates to the home page and asserts the title/heading is visible.\n' +
+    '- Configure `reporter: [[\'html\', { open: \'never\' }]]` in `playwright.config.ts` for CI compatibility.\n'
     : '';
 
   return [
@@ -1773,10 +1912,10 @@ function buildDirectoryTree(answers) {
   L.push('├── README.md');
 
   // Code quality root configs
-  if (infra.codeQuality.includes('ESLint'))       L.push('├── eslint.config.mjs');
-  if (infra.codeQuality.includes('Prettier'))     L.push('├── .prettierrc');
+  if (infra.codeQuality.includes('ESLint')) L.push('├── eslint.config.mjs');
+  if (infra.codeQuality.includes('Prettier')) L.push('├── .prettierrc');
   if (infra.codeQuality.includes('EditorConfig')) L.push('├── .editorconfig');
-  if (infra.codeQuality.includes('Commitlint'))   L.push('├── commitlint.config.js');
+  if (infra.codeQuality.includes('Commitlint')) L.push('├── commitlint.config.js');
   if (infra.codeQuality.includes('Husky')) {
     L.push('├── .husky/');
     L.push('│   ├── pre-commit');
@@ -1910,7 +2049,7 @@ function buildScaffoldInstructions(answers) {
     `6. **Docker Orchestration** *(${infra.hasDocker ? 'enabled' : 'skipped'})*`,
     infra.hasDocker
       ? `   - Copy the \`docker-compose.yml\` template from Section 6 **verbatim** to the project root.\n   - Do not rename services, change internal hostnames, or alter port mappings.\n   - Write multi-stage Dockerfiles: frontend \`EXPOSE 3000\`, backend \`EXPOSE 8000\`.` +
-        (infra.dockerFeatures && infra.dockerFeatures.includes('.dockerignore') ? `\n   - Write \`.dockerignore\` files for both backend and frontend as detailed in Section 6 to ignore \`node_modules\`, environment files, and build outputs.` : '')
+      (infra.dockerFeatures && infra.dockerFeatures.includes('.dockerignore') ? `\n   - Write \`.dockerignore\` files for both backend and frontend as detailed in Section 6 to ignore \`node_modules\`, environment files, and build outputs.` : '')
       : '   _Skipped._',
     '',
     `7. **CI/CD** *(${infra.hasCICD ? `${infra.cicdPlatform} — ${list(infra.cicdSteps)}` : 'skipped'})*`,
@@ -1937,6 +2076,16 @@ function buildScaffoldInstructions(answers) {
     '- For NestJS/TypeScript backends: explicitly define `"rootDir": "src"` and `"incremental": false` under `"compilerOptions"` in `tsconfig.build.json` (and exclude config files like `vitest.config.ts`) to ensure the compiled JS goes straight to `dist/` (not nested inside `dist/src/`) and build caching issues are avoided inside containers.',
     '- For OAuth authentication: ensure NestJS/Passport strategies (like Google, Azure AD, GitHub, etc.) check for empty environment variables and fall back to dummy/placeholder strings (e.g. \'dummy-google-client-id\', \'dummy-azure-client-id\') during construction to prevent the server from crashing on boot in local development.',
     '- For Next.js rewrites: when proxying `/api` or `/api/auth` to the backend, resolve the target URL using `process.env.NEXT_PUBLIC_API_URL_INTERNAL || (isDocker ? \'http://backend:8000\' : \'http://localhost:8000\')` (where `isDocker` is checked via `fs.existsSync(\'/.dockerenv\')`) so that rewrites work correctly during both local host development and container-internal build stages.',
+    // FIX-I: Python + MySQL async critical rules
+    ...(backend.hasBackend && language === 'Python' ? [
+      '- For Python + MySQL async (SQLAlchemy + aiomysql): set `DATABASE_URL=mysql+aiomysql://user:pass@db:3306/appdb` in the docker-compose.yml environment block and in `backend/.env`. The `mysql://` dialect prefix is sync-only and will cause SQLAlchemy async engine to fail.',
+      '- For Python + MySQL async: install `aiomysql` in `requirements.txt`. Without it, `create_async_engine()` raises a `ModuleNotFoundError` at startup.',
+      '- For Python Dockerfiles: use `python:3.12-slim` as the base image, NOT `python:3.12-alpine`. Alpine\'s musl libc lacks pre-compiled wheels for packages like `cryptography`, `aiomysql`, and `greenlet`. Use slim (Debian-based) to avoid build failures.',
+      '- For Alembic with async SQLAlchemy: `alembic/env.py` must use `run_async_migrations()` with `AsyncEngine.connect()`. The default sync `env.py` scaffold from `alembic init` will fail with async engines.',
+    ] : []),
+    ...(backend.hasBackend && language === 'Python' && backend.backendExtras.includes('Background Queues') ? [
+      '- For Celery workers in Docker: add a separate `celery` service to `docker-compose.yml` sharing the same network and env_file as `backend`. Command: `celery -A app.core.celery_app worker --loglevel=info`. This service must `depend_on` the `redis` service with `condition: service_healthy`.',
+    ] : []),
   ].filter((l) => l !== false).join('\n');
 }
 

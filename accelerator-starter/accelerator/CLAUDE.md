@@ -31,3 +31,16 @@ Implement `GET /api/health` → `{ status: "ok" }` in the backend.
 - Support `data-theme="light"` and `data-theme="dark"` on the root element.
 - Include a visible theme toggle in the UI.
 - Fonts: `Boska` (display) and `Satoshi` (body).
+
+## Python-Specific Rules (applies when `Primary Language: Python` in SPEC.md)
+
+- **MySQL async dialect**: When DB is MySQL and ORM is SQLAlchemy, always set `DATABASE_URL=mysql+aiomysql://user:pass@db:3306/appdb`. The `mysql://` prefix is sync-only and will cause `create_async_engine()` to fail. Install `aiomysql` in `requirements.txt`.
+- **Python Dockerfile base image**: Use `python:3.12-slim`, NOT `python:3.12-alpine`. Alpine uses musl libc which lacks pre-compiled wheels for `cryptography`, `aiomysql`, and `greenlet`. Use slim (Debian-based) to avoid build failures.
+- **Alembic async env.py**: The default `alembic init` scaffold is synchronous. Replace `alembic/env.py` with the async version using `run_async_migrations()` and `AsyncEngine.connect()`. The default sync env will crash with `MissingGreenlet` errors.
+- **Celery in Docker**: When Background Queues is enabled, add a separate `celery` service to `docker-compose.yml` sharing the same `env_file` and network as `backend`. Command: `celery -A app.core.celery_app worker --loglevel=info`. Must `depend_on` the `redis` service.
+- **Redis caching (Python)**: Use `redis.asyncio` (from the `redis` package), not `ioredis`. Create `app/core/redis.py` with `redis.asyncio.from_url(REDIS_URL, retry_on_timeout=True)`.
+- **Email service (Python)**: Use `fastapi-mail` (SMTP) or `resend` (API). Do NOT use Nodemailer.
+- **File uploads (Python)**: Use `boto3` + `python-multipart`. Do NOT use `@aws-sdk/client-s3` or `multer`.
+- **WebSockets (FastAPI)**: Use FastAPI's native `@router.websocket()` — no extra package needed. Do NOT install `socket.io`.
+- **WebSockets (Django)**: Install `channels channels-redis`. Replace `asgi.py` with `ProtocolTypeRouter`.
+

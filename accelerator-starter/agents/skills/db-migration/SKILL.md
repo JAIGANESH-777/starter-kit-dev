@@ -159,3 +159,119 @@ Before committing a migration or schema file, verify the following:
 - [ ] Are performance-critical filter/query columns indexed?
 - [ ] Is there an idempotent seed updated to reflect the new models/columns?
 - [ ] Does the migration run successfully locally from scratch? (Test by resetting: e.g. `npx prisma migrate reset` or running migrations on a clean docker db container)
+
+---
+
+## 5. MySQL-Specific Migration Gotchas
+
+When SPEC.md Section 4 declares `MySQL` as the database, be aware of these MySQL-specific behaviors that differ from PostgreSQL.
+
+### 5.1 `ALTER TABLE` Locks the Entire Table
+
+Unlike PostgreSQL's `CREATE INDEX CONCURRENTLY`, MySQL's `ALTER TABLE` acquires a **full table lock** during structural changes. On large tables (>1M rows), this blocks all reads and writes.
+
+| Operation | Risk | Safe Alternative |
+|:---|:---|:---|
+| `ADD COLUMN NOT NULL` (no default) | 🔴 Table lock + data backfill | Add as `NULL` first, backfill, then `ALTER` to `NOT NULL` |
+| `ADD INDEX` on large table | 🟡 Partial lock | Use `CREATE INDEX` in a maintenance window or `pt-online-schema-change` |
+| `DROP COLUMN` | 🟡 Table lock | Confirm no code reads it, then drop |
+| `CHANGE COLUMN` (rename) | 🔴 Full copy | Use expand-and-contract; never rename directly |
+| `ADD COLUMN` with default | 🟢 Instant (MySQL 8.0+) | Instant DDL supported for nullable + default |
+
+**Tool**: For zero-downtime migrations on MySQL, use [`pt-online-schema-change`](https://www.percona.com/doc/percona-toolkit/3.0/pt-online-schema-change.html) or [`gh-ost`](https://github.com/github/gh-ost).
+
+### 5.2 MySQL Does Not Have a `BOOLEAN` Type
+
+MySQL stores `BOOLEAN` as `TINYINT(1)`. SQLAlchemy handles this transparently with `Column(Boolean)`, but raw SQL migrations must use `TINYINT(1)`:
+
+```sql
+-- ✅ Correct MySQL boolean column
+ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1;
+
+-- ❌ This works in MySQL 8 but is an alias for TINYINT — don't assume it's a true bool
+ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+```
+
+In SQLAlchemy Alembic migrations:
+```python
+# ✅ SQLAlchemy automatically maps Boolean → TINYINT(1) for MySQL
+op.add_column('users', sa.Column('is_active', sa.Boolean(), nullable=False, server_default='1'))
+```
+
+### 5.3 `CREATE INDEX CONCURRENTLY` Does NOT Exist in MySQL
+
+PostgreSQL supports non-locking concurrent index creation. MySQL does NOT. The `CONCURRENTLY` keyword in the db-migration skill Section 1 is **PostgreSQL only**.
+
+```sql
+-- ✅ PostgreSQL (non-locking)
+CREATE INDEX CONCURRENTLY idx_users_email ON users(email);
+
+-- ✅ MySQL 8.0+ (online DDL — less locking, but still some impact on large tables)
+ALTER TABLE users ADD INDEX idx_users_email (email), ALGORITHM=INPLACE, LOCK=NONE;
+
+-- ❌ MySQL — this will error
+CREATE INDEX CONCURRENTLY idx_users_email ON users(email);
+```
+
+### 5.4 JSON Columns in MySQL
+
+MySQL 8.0+ supports native JSON columns, but querying differs from PostgreSQL:
+
+```sql
+-- MySQL JSON query syntax
+SELECT * FROM users WHERE JSON_EXTRACT(metadata, '$.role') = 'admin';
+
+-- PostgreSQL JSONB query syntax (different!)
+SELECT * FROM users WHERE metadata->>'role' = 'admin';
+```
+
+In SQLAlchemy:
+```python
+# Works for both PostgreSQL and MySQL:
+from sqlalchemy import Column, JSON
+metadata = Column(JSON)
+
+# MySQL-specific JSON path query in SQLAlchemy:
+from sqlalchemy import func
+result = await db.execute(
+    select(User).where(func.json_extract(User.metadata, "$.role") == "admin")
+)
+```
+
+### 5.5 Alembic Auto-detect with MySQL Charset
+
+Alembic may generate spurious `ALTER TABLE ... CHARSET` changes when comparing MySQL tables. Suppress this by setting `compare_type=True` and `compare_server_default=True` in `env.py`:
+
+```python
+# alembic/env.py — in configure() call
+context.configure(
+    connection=connection,
+    target_metadata=target_metadata,
+    compare_type=True,
+    compare_server_default=True,
+    # Suppress MySQL charset noise:
+    include_schemas=False,
+    render_as_batch=False,  # batch mode is SQLite-only
+)
+```
+
+### 5.6 Seeding with MySQL AUTO_INCREMENT
+
+MySQL's `AUTO_INCREMENT` does not reset when rows are deleted. Never hardcode IDs in seed scripts — always use natural unique keys (email, slug, code) for upsert lookups:
+
+```python
+# ✅ CORRECT: idempotent MySQL seed using SQLAlchemy
+from sqlalchemy.dialects.mysql import insert as mysql_insert
+
+async def seed_roles(db: AsyncSession):
+    roles = [
+        {"name": "admin", "description": "System Administrator"},
+        {"name": "viewer", "description": "Read-only access"},
+    ]
+    stmt = mysql_insert(Role).values(roles)
+    # ON DUPLICATE KEY UPDATE — MySQL's equivalent of ON CONFLICT DO UPDATE
+    stmt = stmt.on_duplicate_key_update(description=stmt.inserted.description)
+    await db.execute(stmt)
+    await db.commit()
+```
+

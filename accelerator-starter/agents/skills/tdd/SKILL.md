@@ -108,3 +108,120 @@ After all tests pass, look for [refactor candidates](references/refactoring.md):
 [ ] Code is minimal for this test
 [ ] No speculative features added
 ```
+
+---
+
+## Python Supplement — pytest + FastAPI Testing
+
+When working on Python projects (`language: Python` in SPEC.md), apply the same TDD philosophy using pytest + httpx. The patterns below are the Python equivalent of the TypeScript examples above.
+
+### Setup
+
+```bash
+pip install pytest pytest-asyncio httpx aiosqlite
+```
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+asyncio_mode = "auto"   # no need to add @pytest.mark.asyncio to every test
+testpaths = ["backend/test"]
+```
+
+### Tracer Bullet — First Test (RED → GREEN)
+
+```python
+# backend/test/test_health.py
+# RED: Write this first — it will fail until the /api/health route exists
+async def test_health_returns_ok(client):
+    response = await client.get("/api/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+# GREEN: In app/routers/health.py, implement:
+# @router.get("/health")
+# async def health():
+#     return {"status": "ok"}
+```
+
+### Fixture Pattern (from `conftest.py`)
+
+```python
+# backend/test/conftest.py
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.pool import StaticPool
+from httpx import AsyncClient, ASGITransport
+from app.main import app
+from app.db.base import Base
+from app.core.dependencies import get_db
+
+@pytest_asyncio.fixture(scope="session")
+async def test_engine():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    await engine.dispose()
+
+@pytest_asyncio.fixture
+async def db_session(test_engine):
+    async_session = async_sessionmaker(bind=test_engine, expire_on_commit=False)
+    async with async_session() as session:
+        yield session
+        await session.rollback()  # isolate each test
+
+@pytest_asyncio.fixture
+async def client(db_session):
+    app.dependency_overrides[get_db] = lambda: db_session
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+    app.dependency_overrides.clear()
+```
+
+### Vertical Slices — Feature TDD
+
+```python
+# backend/test/test_users.py
+
+# ── RED: write the test first ─────────────────────────────────────────────────
+async def test_create_user_returns_201(client):
+    response = await client.post("/api/users", json={
+        "email": "alice@example.com",
+        "password": "secure-password",
+    })
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["email"] == "alice@example.com"
+    assert "password" not in data           # never return raw password
+    assert "hashed_password" not in data    # never return hash either
+
+# ── GREEN: implement the minimum router + service to pass ────────────────────
+# ── REFACTOR: extract user creation into UserService, clean up ───────────────
+
+async def test_duplicate_email_returns_409(client):
+    await client.post("/api/users", json={"email": "bob@example.com", "password": "pw"})
+    response = await client.post("/api/users", json={"email": "bob@example.com", "password": "pw"})
+    assert response.status_code == 409
+```
+
+### Anti-Pattern: Testing Implementation Details
+
+```python
+# ❌ WRONG: tests implementation, not behavior
+async def test_user_service_calls_repository(monkeypatch):
+    mock_repo = AsyncMock()
+    monkeypatch.setattr("app.services.user_service.user_repo", mock_repo)
+    await user_service.create(email="x@y.com", password="pw")
+    mock_repo.save.assert_called_once()  # breaks if you rename .save() → .persist()
+
+# ✅ CORRECT: tests behavior through the public API
+async def test_user_is_persisted_after_creation(client, db_session):
+    await client.post("/api/users", json={"email": "x@y.com", "password": "pw"})
+    result = await db_session.execute(select(User).where(User.email == "x@y.com"))
+    assert result.scalar_one_or_none() is not None
+```
