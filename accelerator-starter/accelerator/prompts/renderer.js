@@ -1918,7 +1918,7 @@ function buildDirectoryTree(answers) {
 // ── Scaffold instructions (section 9) ───────────────────────────────────────
 
 function buildScaffoldInstructions(answers) {
-  const { frontend, backend, database, auth, infra, quality } = answers;
+  const { frontend, backend, database, auth, infra, quality, language } = answers;
 
   return [
     '## 9. AI Scaffold Instructions',

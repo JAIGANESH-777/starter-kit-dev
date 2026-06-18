@@ -27,11 +27,12 @@ export async function askDatabase(projectType, language, backendFramework = '') 
     { name: 'DynamoDB — AWS serverless NoSQL', value: 'DynamoDB' },
   ];
 
-  const databases = await checkbox({
-    message: 'Select databases: (space to select)',
+  const selectedDatabase = await select({
+    message: 'Select database:',
     choices: dbChoices,
-    validate: (choices) => choices.length > 0 || 'Select at least one database.',
   });
+
+  const databases = [selectedDatabase];
 
   const hasMongo      = databases.includes('MongoDB');
   const hasRelational = databases.some((d) =>

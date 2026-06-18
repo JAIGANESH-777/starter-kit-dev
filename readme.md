@@ -63,7 +63,7 @@ Scaffolding a new project is done in three main steps:
 First, navigate to the `accelerator` directory, install the CLI prompt dependencies, and run the compiler:
 
 ```bash
-cd accelerator-starter/accelerator
+cd starter-kit-dev/accelerator-starter/accelerator
 npm install @inquirer/prompts chalk
 node prompts/installer.js
 ```
