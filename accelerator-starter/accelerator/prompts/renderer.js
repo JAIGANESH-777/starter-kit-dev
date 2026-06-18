@@ -195,18 +195,17 @@ function buildBackend({ backend, auth, database, language }) {
     }
   }
   if (backend.backendExtras.includes('Background Queues')) {
-<<<<<<< HEAD
     if (language === 'Python') {
       extrasInstructionLines.push('#### Background Queues (Celery)');
+      extrasInstructionLines.push('- Install: `celery redis`');
       if (isFastAPI) {
-        extrasInstructionLines.push('- Install: `celery`');
         extrasInstructionLines.push('- Create `backend/app/core/celery_app.py` — initialize a `Celery` instance configured with `REDIS_URL` as broker and result backend.');
-        extrasInstructionLines.push('- Create `backend/app/tasks/example.py` — define tasks using `@celery_app.task`.');
+        extrasInstructionLines.push('- Create `backend/app/tasks/` directory — define task functions decorated with `@celery_app.task(bind=True)`.');
       } else if (isDjango) {
-        extrasInstructionLines.push('- Install: `celery`');
         extrasInstructionLines.push('- Create `backend/celery.py` and configure celery app integration in `backend/__init__.py` and settings.');
         extrasInstructionLines.push('- Create `apps/tasks.py` within apps for Celery shared tasks.');
       }
+      extrasInstructionLines.push('- Add a `celery` service to `docker-compose.yml` running: `celery -A app.core.celery_app worker --loglevel=info`');
     } else {
       extrasInstructionLines.push('#### Background Queues (BullMQ)');
       if (isNestJS) {
@@ -219,27 +218,6 @@ function buildBackend({ backend, auth, database, language }) {
         extrasInstructionLines.push('- Create `src/queues/worker.ts` — initialize a `Worker` from `bullmq` using `REDIS_URL`.');
         extrasInstructionLines.push('- Create `src/queues/producer.ts` — export a `Queue` instance for enqueueing jobs.');
       }
-=======
-    // FIX-E: Background Queues for Python → Celery; for Node → BullMQ
-    if (language === 'Python') {
-      extrasInstructionLines.push('#### Background Queues (Celery)');
-      extrasInstructionLines.push('- Install: `celery redis`');
-      extrasInstructionLines.push('- Create `app/core/celery_app.py` — configure a Celery instance using `REDIS_URL` as broker AND result backend.');
-      extrasInstructionLines.push('- Create `app/tasks/` directory — define task functions decorated with `@celery_app.task(bind=True)`.');
-      extrasInstructionLines.push('- Add a `celery` service to `docker-compose.yml` running: `celery -A app.core.celery_app worker --loglevel=info`');
-      extrasInstructionLines.push('- Example task call: `my_task.delay(arg1, arg2)` from any FastAPI/Django endpoint.');
-    } else if (isNestJS) {
-      extrasInstructionLines.push('#### Background Queues (BullMQ)');
-      extrasInstructionLines.push('- Install: `@nestjs/bullmq bullmq`');
-      extrasInstructionLines.push('- Create `src/queues/queues.module.ts` — register `BullModule.forRootAsync()` using `REDIS_URL`.');
-      extrasInstructionLines.push("- Create `src/queues/example.processor.ts` with `@Processor('example')` decorator and at least one `@Process()` handler.");
-      extrasInstructionLines.push('- Import `QueuesModule` in `app.module.ts`.');
-    } else {
-      extrasInstructionLines.push('#### Background Queues (BullMQ)');
-      extrasInstructionLines.push('- Install: `bullmq`');
-      extrasInstructionLines.push('- Create `src/queues/worker.ts` — initialize a `Worker` from `bullmq` using `REDIS_URL`.');
-      extrasInstructionLines.push('- Create `src/queues/producer.ts` — export a `Queue` instance for enqueueing jobs.');
->>>>>>> a42d349 (feat(accelerator): fix multi-stack compatibility issues and add python-async-patterns skill)
     }
   }
   if (backend.backendExtras.includes('Redis Caching') || backend.backendExtras.includes('Background Queues')) {
@@ -252,17 +230,6 @@ function buildBackend({ backend, auth, database, language }) {
   }
   if (backend.backendExtras.includes('WebSockets')) {
     extrasInstructionLines.push('#### WebSockets');
-<<<<<<< HEAD
-    if (language === 'Python') {
-      if (isFastAPI) {
-        extrasInstructionLines.push('- Install: `websockets` (if needed for client, but FastAPI has native `WebSocket` support)');
-        extrasInstructionLines.push('- Create `backend/app/routers/websocket.py` — implement a WebSocket endpoint (`@router.websocket("/ws")`) managing connections and broadcasting messages.');
-      } else if (isDjango) {
-        extrasInstructionLines.push('- Install: `channels daphne`');
-        extrasInstructionLines.push('- Configure Daphne as ASGI server and set up routing/consumers in `backend/routing.py`.');
-      }
-=======
-    // FIX-H: FastAPI has native WebSocket support; Django requires channels
     if (language === 'Python') {
       if (isFastAPI) {
         extrasInstructionLines.push('- FastAPI has **native WebSocket support** — no extra package needed.');
@@ -281,18 +248,10 @@ function buildBackend({ backend, auth, database, language }) {
       extrasInstructionLines.push('- Create `src/gateway/app.gateway.ts` decorated with `@WebSocketGateway({ cors: true })`.');
       extrasInstructionLines.push('- Implement `afterInit`, `handleConnection`, `handleDisconnect` lifecycle hooks and at least one `@SubscribeMessage()` handler.');
       extrasInstructionLines.push('- Register the gateway in `src/gateway/gateway.module.ts` and import in `app.module.ts`.');
->>>>>>> a42d349 (feat(accelerator): fix multi-stack compatibility issues and add python-async-patterns skill)
     } else {
-      if (isNestJS) {
-        extrasInstructionLines.push('- Install: `@nestjs/websockets @nestjs/platform-socket.io socket.io`');
-        extrasInstructionLines.push('- Create `src/gateway/app.gateway.ts` decorated with `@WebSocketGateway({ cors: true })`.');
-        extrasInstructionLines.push('- Implement `afterInit`, `handleConnection`, `handleDisconnect` lifecycle hooks and at least one `@SubscribeMessage()` handler.');
-        extrasInstructionLines.push('- Register the gateway in `src/gateway/gateway.module.ts` and import in `app.module.ts`.');
-      } else {
-        extrasInstructionLines.push('- Install: `socket.io`');
-        extrasInstructionLines.push('- Create `src/gateway/socket.ts` — attach a Socket.IO server to the HTTP server instance and export the `io` object.');
-        extrasInstructionLines.push('- Import `io` in route handlers to emit events as needed.');
-      }
+      extrasInstructionLines.push('- Install: `socket.io`');
+      extrasInstructionLines.push('- Create `src/gateway/socket.ts` — attach a Socket.IO server to the HTTP server instance and export the `io` object.');
+      extrasInstructionLines.push('- Import `io` in route handlers to emit events as needed.');
     }
   }
   if (backend.backendExtras.includes('Email Service')) {
