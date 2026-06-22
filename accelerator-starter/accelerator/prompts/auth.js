@@ -59,7 +59,7 @@ export async function askAuth(projectType, language, backendFramework = '') {
   } else {
     // TypeScript / JavaScript backends
     const tsProviderChoices = [
-      ...(backendFramework === '' || ['NestJS', 'Express.js', 'Fastify', 'Hono'].includes(backendFramework)
+      ...(backendFramework === '' || ['NestJS', 'Express.js', 'Fastify'].includes(backendFramework)
         ? [{ name: 'Passport.js (recommended for NestJS / Express / Fastify)', value: 'Passport.js' }]
         : []),
       { name: 'Auth.js / NextAuth.js (best for Next.js fullstack)', value: 'Auth.js' },

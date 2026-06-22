@@ -23,12 +23,17 @@ function formatDate(iso) {
 
 // BUG FIX: DATABASE_URL was hardcoded to postgresql:// in Section 3 regardless of DB choice.
 // This helper derives the correct URL prefix from the databases actually selected.
-function buildDatabaseUrl(database) {
+function buildDatabaseUrl(database, language) {
   if (!database || !database.hasDatabase || !database.databases) {
     return 'DATABASE_URL=';
   }
   const dbs = database.databases;
-  if (dbs.includes('MySQL')) return 'DATABASE_URL=mysql://user:password@localhost:3306/appdb';
+  if (dbs.includes('MySQL')) {
+    if (language === 'Python' && database.orm === 'SQLAlchemy') {
+      return 'DATABASE_URL=mysql+aiomysql://user:password@localhost:3306/appdb';
+    }
+    return 'DATABASE_URL=mysql://user:password@localhost:3306/appdb';
+  }
   if (dbs.includes('MongoDB')) return 'DATABASE_URL=mongodb://localhost:27017/appdb';
   if (dbs.some((d) => ['PostgreSQL', 'PlanetScale', 'Supabase'].includes(d))) return 'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/appdb';
   if (dbs.includes('SQLite')) return 'DATABASE_URL=file:./dev.db';
@@ -538,7 +543,7 @@ function buildBackend({ backend, auth, database, language }) {
     '',
     '```env',
     '# backend/.env',
-    buildDatabaseUrl(database),
+    buildDatabaseUrl(database, language),
     'JWT_SECRET=change-me-in-production',
     `PORT=8000${extraEnvVars}`,
     '```',
@@ -795,7 +800,7 @@ function buildAuth({ auth, projectType }) {
         return '- **Email/Password**: email input + password input + submit button. Include a "Forgot password?" link.';
       case 'Magic Link':
         return '- **Magic Link**: single email input + "Send Magic Link" button only. On submit, replace form with: "Check your inbox for a sign-in link." No password field.';
-      case 'OTP / SMS':
+      case 'OTP/SMS':
         return '- **OTP / SMS**: two-step form — Step 1: phone number input + "Send Code" button. Step 2: 6-digit numeric code input (`<input pattern="[0-9]{6}" maxlength="6">`) + "Verify" button.';
       case 'Google OAuth':
         return '- **Google OAuth**: "Continue with Google" branded button with Google logo. Redirects to `/api/auth/google`; handles callback at `/api/auth/google/callback`.';
@@ -857,12 +862,12 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
     database.databases.some((d) => ['PostgreSQL', 'PlanetScale', 'Supabase'].includes(d));
   const hasMySQL = database.hasDatabase && database.databases.includes('MySQL');
   const hasMongo = database.hasDatabase && database.databases.includes('MongoDB');
-  const hasRedis = (database.hasDatabase && database.databases.includes('Redis')) ||
-    (backend.hasBackend && (
+  const hasRedis = backend.hasBackend && (
       backend.backendExtras.includes('Redis Caching') ||
       backend.backendExtras.includes('Background Queues')
-    ));
+    );
   const hasKeycloak = auth.hasAuth && auth.authProvider === 'Keycloak';
+  const hasCelery = backend.hasBackend && backend.language === 'Python' && backend.backendExtras.includes('Background Queues');
 
   const apiUrlVar = !frontend.hasFrontend ? null
     : frontend.framework.includes('Vite') ? 'VITE_API_URL'
@@ -974,6 +979,33 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
     L.push('');
   }
 
+  // ── Celery service ─────────────────────────────────────────────────────────
+  if (hasCelery) {
+    L.push('  celery:');
+    L.push('    build:');
+    L.push('      context: ./backend');
+    L.push('    container_name: app_celery');
+    L.push('    command: celery -A app.core.celery_app worker --loglevel=info');
+    L.push('    env_file:');
+    L.push('      - ./backend/.env');
+    L.push('    environment:');
+    if (hasRedis) L.push('      - CELERY_BROKER_URL=redis://redis:6379/0');
+    if (hasPostgres) L.push('      - DATABASE_URL=postgresql://postgres:postgres@db:5432/appdb');
+    if (hasMySQL) {
+      if (database.orm === 'SQLAlchemy') {
+        L.push('      - DATABASE_URL=mysql+aiomysql://appuser:apppassword@db:3306/appdb');
+      } else {
+        L.push('      - DATABASE_URL=mysql://appuser:apppassword@db:3306/appdb');
+      }
+    }
+    L.push('    depends_on:');
+    if (hasRedis) {
+      L.push('      redis:');
+      L.push('        condition: service_healthy');
+    }
+    L.push('');
+  }
+
   // ── Backend service ────────────────────────────────────────────────────────
   if (backend.hasBackend) {
     const dependsOn = [
@@ -1023,7 +1055,13 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
     L.push('      - ./backend/.env');
     L.push('    environment:');
     if (hasPostgres) L.push('      - DATABASE_URL=postgresql://postgres:postgres@db:5432/appdb');
-    if (hasMySQL) L.push('      - DATABASE_URL=mysql://appuser:apppassword@db:3306/appdb');
+    if (hasMySQL) {
+      if (backend.language === 'Python' && database.orm === 'SQLAlchemy') {
+        L.push('      - DATABASE_URL=mysql+aiomysql://appuser:apppassword@db:3306/appdb');
+      } else {
+        L.push('      - DATABASE_URL=mysql://appuser:apppassword@db:3306/appdb');
+      }
+    }
     if (hasMongo) L.push('      - DATABASE_URL=mongodb://mongo:27017/appdb');
     if (hasRedis) L.push('      - REDIS_URL=redis://redis:6379/0');
     if (hasKeycloak) {

@@ -17,7 +17,6 @@ export async function askDatabase(projectType, language, backendFramework = '') 
     { name: 'MySQL / MariaDB', value: 'MySQL' },
     { name: 'SQLite — lightweight, local/dev only', value: 'SQLite' },
     { name: 'MongoDB — document store, schema-less', value: 'MongoDB' },
-    { name: 'Redis — cache, sessions, pub-sub', value: 'Redis' },
     // Supabase only valid with TypeScript / JS stack (its client SDK is TS-first)
     ...(language !== 'Python' ? [{ name: 'Supabase — Postgres + realtime + auth', value: 'Supabase' }] : []),
     { name: 'PlanetScale — serverless MySQL', value: 'PlanetScale' },

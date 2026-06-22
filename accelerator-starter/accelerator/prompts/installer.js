@@ -92,7 +92,7 @@ function validateCompatibility(answers) {
   const errors = [];
   const warnings = [];
 
-  const { language, backend, database, quality } = answers;
+  const { language, backend, database, quality, auth } = answers;
 
   // 1. Backend framework VS Language
   if (backend.hasBackend) {
@@ -125,6 +125,13 @@ function validateCompatibility(answers) {
     }
     if (language !== 'Python' && pythonORMs.some(orm => database.orm.includes(orm))) {
       errors.push(`Database ORM "${database.orm}" is Python-based, but language is configured as "${language}".`);
+    }
+  }
+
+  // 4. Auth VS Backend Framework
+  if (auth && auth.hasAuth && backend.hasBackend) {
+    if (backend.framework === 'Hono' && auth.authProvider === 'Passport.js') {
+      errors.push('Passport.js is incompatible with Hono. Hono uses Web Standards Request/Response, while Passport requires Node.js req/res mutations.');
     }
   }
 
