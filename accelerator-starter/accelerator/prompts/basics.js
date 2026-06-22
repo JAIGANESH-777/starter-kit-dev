@@ -24,17 +24,19 @@ export async function askProjectBasics() {
     ],
   });
 
-  // Language is always TypeScript for frontend-only; ask only when backend is involved
-  let language = 'TypeScript';
+  // API style is a foundational architectural decision — ask it early because
+  // it influences backend framework recommendations and frontend data-fetching patterns.
+  let apiStyle = 'REST';
   if (projectType !== 'frontend') {
-    language = await select({
-      message: 'Primary language:',
+    apiStyle = await select({
+      message: 'API style:',
       choices: [
-        { name: 'TypeScript / JavaScript ecosystem', value: 'TypeScript' },
-        { name: 'Python ecosystem', value: 'Python' },
+        { name: 'REST (recommended — universal, well-understood)', value: 'REST' },
+        { name: 'GraphQL (complex querying, flexible schema)', value: 'GraphQL' },
+        { name: 'REST + GraphQL hybrid', value: 'REST + GraphQL' },
       ],
     });
   }
 
-  return { projectName, description, projectType, language };
+  return { projectName, description, projectType, apiStyle };
 }

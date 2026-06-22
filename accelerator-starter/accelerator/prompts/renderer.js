@@ -52,7 +52,7 @@ function buildOverview({ projectName, projectType, language, description, genera
     '|:---|:---|',
     `| **Project Name** | \`${projectName}\` |`,
     `| **Type** | \`${projectType}\` |`,
-    `| **Primary Language** | \`${language}\` |`,
+    `| **Language** | \`${language}\` |`,
     `| **Description** | *${description}* |`,
     '',
     '---',
@@ -60,7 +60,7 @@ function buildOverview({ projectName, projectType, language, description, genera
   ].join('\n');
 }
 
-function buildFrontend({ frontend, auth }) {
+function buildFrontend({ frontend, auth, language }) {
   if (!frontend.hasFrontend) return '## 2. Frontend\n_No frontend included._\n\n---\n\n';
 
   const apiUrlVar = frontend.framework.includes('Vite') ? 'VITE_API_URL'
@@ -87,6 +87,187 @@ function buildFrontend({ frontend, auth }) {
       : frontend.framework === 'Nuxt 3'
         ? 'npx nuxi@latest init frontend --packageManager npm --gitInit false'
         : 'npm create svelte@latest frontend';
+
+  let extrasIntegrationBlock = '';
+  if (frontend.frontendExtras && frontend.frontendExtras.length > 0) {
+    const isTS = language === 'TypeScript';
+    const ext = isTS ? 'ts' : 'js';
+    const jsxExt = isTS ? 'tsx' : 'jsx';
+
+    const integrationLines = [];
+
+    if (frontend.frontendExtras.includes('Jest + Testing Library')) {
+      const installCmd = 'npm install -D jest jest-environment-jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event';
+      const jestSetupFile = `// frontend/jest.setup.${ext}\nimport '@testing-library/jest-dom';\n`;
+      const jestConfig = isTS ? `// frontend/jest.config.ts
+import type { Config } from 'jest';
+import nextJest from 'next/jest.js';
+
+const createJestConfig = nextJest({
+  dir: './',
+});
+
+const config: Config = {
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  testEnvironment: 'jest-environment-jsdom',
+};
+
+export default createJestConfig(config);` : `// frontend/jest.config.js
+import nextJest from 'next/jest.js';
+
+const createJestConfig = nextJest({
+  dir: './',
+});
+
+const config = {
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  testEnvironment: 'jest-environment-jsdom',
+};
+
+export default createJestConfig(config);`;
+
+      integrationLines.push(
+        '### Jest & Testing Library Setup',
+        `- **Install**: \`${installCmd}\``,
+        `- Create Jest config file \`frontend/jest.config.${ext}\`:`,
+        `\`\`\`${isTS ? 'typescript' : 'javascript'}`,
+        jestConfig,
+        '```',
+        `- Create setup file \`frontend/jest.setup.${ext}\`:`,
+        `\`\`\`${isTS ? 'typescript' : 'javascript'}`,
+        jestSetupFile,
+        '```',
+        `- **Sample Component Test**: Add a simple component unit test (e.g. \`frontend/components/ui/button.test.${jsxExt}\`) asserting a button component renders its children correctly.`,
+        ''
+      );
+    }
+
+    if (frontend.frontendExtras.includes('Vitest + Testing Library')) {
+      const isNuxt = frontend.framework.includes('Nuxt');
+      const isSvelte = frontend.framework.includes('Svelte');
+      const isNext = frontend.framework.includes('Next.js');
+
+      let installCmd = '';
+      let testSetupFile = '';
+      let vitestConfig = '';
+
+      if (isNuxt) {
+        installCmd = 'npm install -D vitest @vue/test-utils @nuxt/test-utils jsdom';
+        testSetupFile = `// frontend/test/setup.${ext}\nimport { expect } from 'vitest';\n// Nuxt-specific test setups can go here\n`;
+        vitestConfig = `// frontend/vitest.config.${ext}
+import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
+
+export default defineConfig({
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './test/setup.${ext}',
+    alias: {
+      '~': fileURLToPath(new URL('./', import.meta.url)),
+      '@': fileURLToPath(new URL('./', import.meta.url)),
+    },
+  },
+});`;
+      } else if (isSvelte) {
+        installCmd = 'npm install -D vitest @testing-library/svelte @testing-library/jest-dom jsdom';
+        testSetupFile = `// frontend/test/setup.${ext}\nimport '@testing-library/jest-dom';\n`;
+        vitestConfig = `// frontend/vitest.config.${ext}
+import { defineConfig } from 'vitest/config';
+import { sveltekit } from '@sveltejs/kit/vite';
+
+export default defineConfig({
+  plugins: [sveltekit()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './test/setup.${ext}',
+  },
+});`;
+      } else {
+        // React / Next.js
+        installCmd = 'npm install -D vitest @testing-library/react @testing-library/jest-dom jsdom';
+        if (!isNext) installCmd += ' @vitejs/plugin-react';
+
+        testSetupFile = `// frontend/test/setup.${ext}\nimport '@testing-library/jest-dom';\n`;
+        vitestConfig = `// frontend/vitest.config.${ext}
+import { defineConfig } from 'vitest/config';
+${isNext ? '' : "import react from '@vitejs/plugin-react';\n"}
+export default defineConfig({
+  ${isNext ? '' : 'plugins: [react()],\n'}  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './test/setup.${ext}',
+  },
+});`;
+      }
+
+      integrationLines.push(
+        '### Vitest & Testing Library Setup',
+        `- **Install**: \`${installCmd}\``,
+        `- Create setup config file \`frontend/vitest.config.${ext}\`:`,
+        `\`\`\`${isTS ? 'typescript' : 'javascript'}`,
+        vitestConfig,
+        '```',
+        `- Create setup helper \`frontend/test/setup.${ext}\`:`,
+        `\`\`\`${isTS ? 'typescript' : 'javascript'}`,
+        testSetupFile,
+        '```',
+        `- **Sample Component Test**: Add a simple unit test (e.g. \`frontend/components/ui/button.test.${jsxExt}\`) asserting a button component renders its children correctly.`,
+        ''
+      );
+    }
+
+    if (frontend.frontendExtras.includes('MSW')) {
+      const isSSR = ['Next.js', 'Nuxt 3', 'SvelteKit'].includes(frontend.framework);
+
+      const mswInstructions = [
+        '### MSW (Mock Service Worker) Setup',
+        '- **Install**: `npm install -D msw`',
+        '- **Browser Initializer**: Run `npx msw init public/ --save` to output `mockServiceWorker.js` to the public/static folder.',
+        `- Create request handlers \`frontend/mocks/handlers.${ext}\`:`,
+        `\`\`\`${isTS ? 'typescript' : 'javascript'}`,
+        `import { http, HttpResponse } from 'msw';
+
+export const handlers = [
+  http.get('*/api/health', () => {
+    return HttpResponse.json({ status: 'ok' });
+  }),
+];`,
+        '```',
+        `- Create browser mock client \`frontend/mocks/browser.${ext}\`:`,
+        `\`\`\`${isTS ? 'typescript' : 'javascript'}`,
+        `import { setupWorker } from 'msw/browser';
+import { handlers } from './handlers';
+
+export const worker = setupWorker(...handlers);`,
+        '```'
+      ];
+
+      if (isSSR) {
+        mswInstructions.push(
+          `- Create server mock listener for SSR \`frontend/mocks/server.${ext}\`:`,
+          `\`\`\`${isTS ? 'typescript' : 'javascript'}`,
+          `import { setupServer } from 'msw/node';
+import { handlers } from './handlers';
+
+export const server = setupServer(...handlers);`,
+          '```',
+          '- **Initialization Scripts**: Wire up the mock worker in your app\'s main entry point (client-side triggers `worker.start()`, server-side during SSR triggers `server.listen()`).',
+          ''
+        );
+      } else {
+        mswInstructions.push(
+          `- **Initialization Scripts**: Wire up \`worker.start()\` in \`frontend/src/main.${ext}\` or application entry point when \`process.env.NODE_ENV === 'development'\`.`,
+          ''
+        );
+      }
+
+      integrationLines.push(...mswInstructions);
+    }
+
+    extrasIntegrationBlock = integrationLines.join('\n');
+  }
 
   return [
     '## 2. Frontend',
@@ -118,11 +299,14 @@ function buildFrontend({ frontend, auth }) {
     '### Design System Adapter Bindings',
     '- Read colors, spacing, and typography from `shared_tokens.md` before writing any CSS.',
     '- **W-4 FIX**: Convert HEX values in `shared_tokens.md` to CSS HSL fragments so Tailwind maps correctly.',
-    '- Implement a `data-theme` dark/light toggle wired to the token system.',
+    frontend.themeSupport
+      ? '- Implement a `data-theme` dark/light toggle wired to the token system.'
+      : `- Apply \`data-theme="${frontend.defaultTheme}"\` as the fixed theme — no toggle needed.`,
+    extrasIntegrationBlock || false,
     '',
     '---',
     '',
-  ].join('\n');
+  ].filter((l) => l !== false).join('\n');
 }
 
 function buildBackend({ backend, auth, database, language }) {
@@ -136,6 +320,7 @@ function buildBackend({ backend, auth, database, language }) {
   const isNestJS = backend.framework === 'NestJS';
   const isDjango = backend.framework === 'Django';
   const isFastAPI = backend.framework === 'FastAPI';
+  const ext = language === 'JavaScript' ? 'js' : 'ts';
 
   const modulePatternHint = isNestJS
     ? `backend/src/{module}/{module}.controller.ts\nbackend/src/{module}/{module}.service.ts\nbackend/src/{module}/{module}.module.ts\nbackend/src/common/          # shared guards, filters, interceptors, pipes\nbackend/src/config/          # environment config module`
@@ -143,20 +328,14 @@ function buildBackend({ backend, auth, database, language }) {
       ? `backend/apps/{app}/views.py\nbackend/apps/{app}/models.py\nbackend/apps/{app}/serializers.py\nbackend/apps/{app}/urls.py`
       : isFastAPI
         ? `backend/app/routers/{resource}.py\nbackend/app/schemas/{resource}.py\nbackend/app/models/{resource}.py\nbackend/app/core/             # config, security, dependencies`
-        : `backend/src/routes/{resource}.ts    # route registration\nbackend/src/controllers/{resource}.ts # request/response handling\nbackend/src/services/{resource}.ts    # business logic\nbackend/src/middleware/              # shared middleware (auth, error, logging)\nbackend/src/config/                  # environment config`;
+        : `backend/src/routes/{resource}.${ext}    # route registration\nbackend/src/controllers/{resource}.${ext} # request/response handling\nbackend/src/services/{resource}.${ext}    # business logic\nbackend/src/middleware/              # shared middleware (auth, error, logging)\nbackend/src/config/                  # environment config`;
 
   // FIX: Emit env vars for selected backend extras — not just list them as bullets.
   const extraEnvLines = new Set();
   if (backend.backendExtras.includes('Redis Caching') || backend.backendExtras.includes('Background Queues')) {
     extraEnvLines.add('REDIS_URL=redis://localhost:6379/0');
   }
-  if (backend.backendExtras.includes('Email Service')) {
-    extraEnvLines.add('SMTP_HOST=smtp.example.com');
-    extraEnvLines.add('SMTP_PORT=587');
-    extraEnvLines.add('SMTP_USER=');
-    extraEnvLines.add('SMTP_PASS=');
-    extraEnvLines.add('EMAIL_FROM=noreply@example.com');
-  }
+
   if (backend.backendExtras.includes('File Uploads')) {
     extraEnvLines.add('AWS_S3_BUCKET=');
     extraEnvLines.add('AWS_ACCESS_KEY_ID=');
@@ -190,7 +369,7 @@ function buildBackend({ backend, auth, database, language }) {
       extrasInstructionLines.push('- Configure the `CACHES` setting in `backend/settings.py` using `django_redis.cache.RedisCache` pointed to `REDIS_URL`.');
     } else {
       extrasInstructionLines.push('- Install: `ioredis`');
-      extrasInstructionLines.push('- Create `src/lib/redis.ts` — export a singleton `ioredis` client initialized from `REDIS_URL`.');
+      extrasInstructionLines.push(`- Create \`src/lib/redis.${ext}\` — export a singleton \`ioredis\` client initialized from \`REDIS_URL\`.`);
       extrasInstructionLines.push('- Import in services that need caching.');
     }
   }
@@ -215,8 +394,8 @@ function buildBackend({ backend, auth, database, language }) {
         extrasInstructionLines.push('- Import `QueuesModule` in `app.module.ts`.');
       } else {
         extrasInstructionLines.push('- Install: `bullmq`');
-        extrasInstructionLines.push('- Create `src/queues/worker.ts` — initialize a `Worker` from `bullmq` using `REDIS_URL`.');
-        extrasInstructionLines.push('- Create `src/queues/producer.ts` — export a `Queue` instance for enqueueing jobs.');
+        extrasInstructionLines.push(`- Create \`src/queues/worker.${ext}\` — initialize a \`Worker\` from \`bullmq\` using \`REDIS_URL\`.`);
+        extrasInstructionLines.push(`- Create \`src/queues/producer.${ext}\` — export a \`Queue\` instance for enqueueing jobs.`);
       }
     }
   }
@@ -250,31 +429,11 @@ function buildBackend({ backend, auth, database, language }) {
       extrasInstructionLines.push('- Register the gateway in `src/gateway/gateway.module.ts` and import in `app.module.ts`.');
     } else {
       extrasInstructionLines.push('- Install: `socket.io`');
-      extrasInstructionLines.push('- Create `src/gateway/socket.ts` — attach a Socket.IO server to the HTTP server instance and export the `io` object.');
+      extrasInstructionLines.push(`- Create \`src/gateway/socket.${ext}\` — attach a Socket.IO server to the HTTP server instance and export the \`io\` object.`);
       extrasInstructionLines.push('- Import `io` in route handlers to emit events as needed.');
     }
   }
-  if (backend.backendExtras.includes('Email Service')) {
-    // FIX-F: Python uses fastapi-mail / resend, not Nodemailer
-    if (language === 'Python') {
-      extrasInstructionLines.push('#### Email Service (fastapi-mail / Resend)');
-      extrasInstructionLines.push('- Install: `fastapi-mail` (SMTP-based) or `resend` (API-based, recommended for production).');
-      extrasInstructionLines.push('- Create `app/core/mail.py` — configure `FastMail` using `ConnectionConfig` with `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, `MAIL_PORT`, `MAIL_SERVER`, `MAIL_STARTTLS`, `MAIL_SSL_TLS`.');
-      extrasInstructionLines.push('- Inject `FastMail` into route handlers via FastAPI dependency injection.');
-      extrasInstructionLines.push('- Use `MessageSchema` to build the email payload and call `fm.send_message(message, template_name=...)`.');
-    } else {
-      extrasInstructionLines.push('#### Email Service (Nodemailer)');
-      extrasInstructionLines.push('- Install: `nodemailer @types/nodemailer`');
-      if (isNestJS) {
-        extrasInstructionLines.push('- Create `src/mail/mail.module.ts` and `src/mail/mail.service.ts`.');
-        extrasInstructionLines.push('- Configure Nodemailer transporter in `MailService` using `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.');
-        extrasInstructionLines.push('- Export `MailModule` globally and import in `app.module.ts`.');
-      } else {
-        extrasInstructionLines.push('- Create `src/lib/mailer.ts` — export a configured Nodemailer transporter using `SMTP_*` env vars.');
-        extrasInstructionLines.push('- Call `transporter.sendMail()` from service functions that need to send emails.');
-      }
-    }
-  }
+
   if (backend.backendExtras.includes('File Uploads')) {
     // FIX-G: Python uses boto3 + python-multipart, not @aws-sdk + multer
     if (language === 'Python') {
@@ -293,8 +452,8 @@ function buildBackend({ backend, auth, database, language }) {
         extrasInstructionLines.push('- S3 client configured from `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.');
         extrasInstructionLines.push('- Generate presigned URLs for downloads via `getSignedUrl` from `@aws-sdk/s3-request-presigner`.');
       } else {
-        extrasInstructionLines.push('- Create `src/lib/s3.ts` — export an S3 client configured from `AWS_*` env vars.');
-        extrasInstructionLines.push('- Add `multer` middleware in `src/routes/uploads.ts` for multipart form parsing.');
+        extrasInstructionLines.push(`- Create \`src/lib/s3.${ext}\` — export an S3 client configured from \`AWS_*\` env vars.`);
+        extrasInstructionLines.push(`- Add \`multer\` middleware in \`src/routes/uploads.${ext}\` for multipart form parsing.`);
         extrasInstructionLines.push('- Upload buffer with `PutObjectCommand`; generate presigned URLs with `getSignedUrl`.');
       }
     }
@@ -307,11 +466,11 @@ function buildBackend({ backend, auth, database, language }) {
       extrasInstructionLines.push('- Apply `@Throttle({ default: { limit: 5, ttl: 900000 } })` decorators on authentication endpoints (e.g. login, verify-otp) to enforce a strict limit of 5 requests per 15 minutes.');
     } else if (backend.framework === 'Fastify') {
       extrasInstructionLines.push('- Install: `@fastify/rate-limit`');
-      extrasInstructionLines.push('- Register `@fastify/rate-limit` globally in `main.ts` with sensible defaults (e.g. 100 requests per minute).');
+      extrasInstructionLines.push(`- Register \`@fastify/rate-limit\` globally in \`main.${ext}\` with sensible defaults (e.g. 100 requests per minute).`);
       extrasInstructionLines.push('- Configure custom rate limits (5 attempts per 15 minutes) specifically for authentication route handlers.');
     } else if (backend.framework === 'Express.js') {
       extrasInstructionLines.push('- Install: `express-rate-limit`');
-      extrasInstructionLines.push('- Register the rate limiter middleware globally in `server.ts` for general API endpoints, and apply a secondary, stricter limiter instance directly on authentication routes.');
+      extrasInstructionLines.push(`- Register the rate limiter middleware globally in \`server.${ext}\` for general API endpoints, and apply a secondary, stricter limiter instance directly on authentication routes.`);
     } else if (isFastAPI) {
       extrasInstructionLines.push('- Install: `slowapi`');
       extrasInstructionLines.push('- Set up a `Limiter` in `app/core/security.py` using client IP address and wire the middleware to the FastAPI app.');
@@ -358,7 +517,9 @@ function buildBackend({ backend, auth, database, language }) {
       ? 'mkdir backend && cd backend && python -m venv venv && source venv/bin/activate (or venv\\Scripts\\activate) && pip install django djangorestframework django-environ'
       : backend.framework === 'FastAPI'
         ? 'mkdir backend && cd backend && python -m venv venv && source venv/bin/activate (or venv\\Scripts\\activate) && pip install fastapi uvicorn pydantic'
-        : 'mkdir backend && cd backend && npm init -y && npm install typescript @types/node ts-node -D && npx tsc --init';
+        : language === 'JavaScript'
+          ? 'mkdir backend && cd backend && npm init -y'
+          : 'mkdir backend && cd backend && npm init -y && npm install typescript @types/node ts-node -D && npx tsc --init';
 
   const envValidationSnippet = language === 'Python'
     ? '# Validate environment variables using pydantic-settings or custom checks\nfrom pydantic_settings import BaseSettings\n\nclass Settings(BaseSettings):\n    DATABASE_URL: str\n    JWT_SECRET: str\n    PORT: int = 8000\n\n    class Config:\n        env_file = ".env"\n\nsettings = Settings()'
@@ -399,6 +560,9 @@ function buildBackend({ backend, auth, database, language }) {
     '```',
     securityBaselineBlock,
     extrasInstructionsBlock,
+    '### Email Service Defaults',
+    '- **Email**: Defaults to Azure/Microsoft Graph API (no additional scaffolding env variables required).',
+    '',
     '### Health Endpoint (L-2 Rule)',
     '- Route: `GET /api/health` → `{ status: "ok" }` with HTTP 200',
     '- **Verify this returns 200 before writing a single frontend component.**',
@@ -408,7 +572,7 @@ function buildBackend({ backend, auth, database, language }) {
   ].join('\n');
 }
 
-function buildDatabase({ database }) {
+function buildDatabase({ database, language }) {
   if (!database.hasDatabase) return '## 4. Database\n_No database included._\n\n---\n\n';
 
   const hasSQLite = database.databases.includes('SQLite');
@@ -488,8 +652,10 @@ function buildDatabase({ database }) {
 
   let prismaConnGuard = '';
   if (database.orm === 'Prisma') {
-    prismaConnGuard = '\n#### C-2 Connection Override Code (Insert in backend startup/main.ts)\n' +
-      '```typescript\n' +
+    const isTS = language === 'TypeScript';
+    const ext = isTS ? 'ts' : 'js';
+    prismaConnGuard = `\n#### C-2 Connection Override Code (Insert in backend startup/main.${ext})\n` +
+      `\`\`\`${isTS ? 'typescript' : 'javascript'}\n` +
       '// Override postgres:// with postgresql:// for Prisma compatibility\n' +
       'const databaseUrl = process.env.DATABASE_URL;\n' +
       'if (databaseUrl && databaseUrl.startsWith("postgres://")) {\n' +
@@ -550,7 +716,6 @@ function buildDatabase({ database }) {
     '|:---|:---|',
     `| **Databases** | \`${list(database.databases)}\` |`,
     `| **ORM / Query Layer** | \`${database.orm}\` |`,
-    `| **Migrations** | \`${yesNo(database.hasMigrations)}\` |`,
     `| **Seed Scripts** | \`${yesNo(database.hasSeed)}\` |`,
     '',
     '### Connection Rules',
@@ -646,16 +811,7 @@ function buildAuth({ auth, projectType }) {
     ? `\n### Frontend Auth UI Requirements\n> Implement **every** selected auth method with its own distinct UI. Do not default to email+password for all methods.\n${authUIRules.join('\n')}\n`
     : '';
 
-  // Multi-tenant interceptor global registration rule
-  const multiTenantRegistrationBlock = auth.hasMultiTenant
-    ? '\n### Multi-Tenant Interceptor Registration (mandatory)\n' +
-    '- **NestJS**: add `{ provide: APP_INTERCEPTOR, useClass: TenantInterceptor }` to the `providers` array in `app.module.ts`. Import `APP_INTERCEPTOR` from `@nestjs/core`.\n' +
-    '- **Express / Fastify / Hono**: register `tenantMiddleware` **before** all route handlers in `server.ts` — `app.use(tenantMiddleware)`.\n' +
-    '- **FastAPI**: implement a `get_tenant_id` dependency to retrieve `tenant_id` from the `X-Tenant-ID` header or JWT claims, and filter SQLAlchemy database queries.\n' +
-    '- **Django**: register a `TenantMiddleware` that extracts `tenant_id` and stores it in thread-local storage/context vars, and subclass `TenantModel` using a custom manager to auto-filter queries by `tenant_id`.\n' +
-    '- Apply `@CurrentTenant()` decorator (or equivalent framework dependency/middleware extraction) in every controller or resolver that queries tenant-scoped data.\n' +
-    '- Every DB query touching tenant data **must** be scoped to `tenantId`. A query without a tenant scope is a critical security bug.\n'
-    : '';
+
 
   return [
     '## 5. Authentication & Authorization',
@@ -665,7 +821,6 @@ function buildAuth({ auth, projectType }) {
     `| **Strategy** | \`${auth.authStrategy}\` |`,
     `| **Implementation** | \`${auth.authProvider}\` |`,
     `| **RBAC** | \`${yesNo(auth.hasRBAC)}\` |`,
-    `| **Multi-Tenant** | \`${yesNo(auth.hasMultiTenant)}\` |`,
     '',
     '### Auth Methods',
     bullet(auth.authMethods),
@@ -684,9 +839,7 @@ function buildAuth({ auth, projectType }) {
     '- Protect all non-public routes with auth guards/middleware.',
     '- Store tokens in HTTP-only cookies — never in localStorage. Set the `HttpOnly`, `Secure` (production only), and `SameSite=Strict` flags on the auth cookie to prevent session leakage and hijacking.',
     '- Refresh tokens must be rotated on every use.',
-    auth.hasMultiTenant ? '- Multi-tenant: scope every DB query to the resolved `tenantId`. Cross-tenant access is a critical security bug.' : '',
     authUIBlock,
-    multiTenantRegistrationBlock,
     rolesBlock,
     '---',
     '',
@@ -945,14 +1098,11 @@ function buildDockerCompose({ frontend, backend, database, auth, infra }) {
 
 function buildInfra({ infra, frontend, backend, database, auth, language }) {
   const parts = [
-    '## 6. Infrastructure & DevOps',
+    '## 6. Infrastructure',
     '',
     '| Field | Value |',
     '|:---|:---|',
-    `| **Cloud / Platform** | \`${infra.cloud}\` |`,
-    `| **Terraform (IaC)** | \`${yesNo(infra.hasTerraform)}\` |`,
     `| **Docker** | \`${yesNo(infra.hasDocker)}\` |`,
-    `| **CI/CD** | \`${infra.hasCICD ? `Yes — ${infra.cicdPlatform}` : 'No'}\` |`,
     '',
   ];
 
@@ -969,7 +1119,7 @@ function buildInfra({ infra, frontend, backend, database, auth, language }) {
     parts.push('- Add `depends_on: { <service>: { condition: service_healthy } }` to avoid race conditions');
     parts.push('');
 
-    // FIX: Embed the fully dynamic compose template, scoped to what was actually selected.
+    // Embed the fully dynamic compose template, scoped to what was actually selected.
     parts.push(buildDockerCompose({ frontend, backend, database, auth, infra }));
 
     if (infra.dockerFeatures && infra.dockerFeatures.includes('.dockerignore')) {
@@ -979,7 +1129,7 @@ function buildInfra({ infra, frontend, backend, database, auth, language }) {
       if (backend.hasBackend) {
         parts.push('#### backend/.dockerignore');
         parts.push('```text');
-        // FIX-D: Language-aware .dockerignore — Python backends have no node_modules or dist.
+        // Language-aware .dockerignore — Python backends have no node_modules or dist.
         if (language === 'Python') {
           parts.push('__pycache__/');
           parts.push('*.py[cod]');
@@ -1029,460 +1179,15 @@ function buildInfra({ infra, frontend, backend, database, auth, language }) {
     }
   }
 
-  if (infra.hasCICD && infra.cicdSteps.length > 0) {
-    parts.push(`### CI/CD Pipeline (${infra.cicdPlatform})`);
-    parts.push(`Create this configuration at the root of your project.`);
-    parts.push('');
-
-    if (infra.cicdPlatform === 'GitHub Actions') {
-      const stepsYaml = [];
-      if (infra.cicdSteps.includes('Lint')) {
-        stepsYaml.push('      - name: Run Linters\n        run: ' + (language === 'Python' ? 'pip install ruff && ruff check .' : 'npm run lint'));
-      }
-      if (infra.cicdSteps.includes('Type check')) {
-        stepsYaml.push('      - name: Type Check\n        run: ' + (language === 'Python' ? 'pip install mypy && mypy .' : 'npm run typecheck'));
-      }
-      if (infra.cicdSteps.includes('Unit tests')) {
-        stepsYaml.push('      - name: Run Unit Tests\n        run: ' + (language === 'Python' ? 'pytest' : 'npm run test'));
-      }
-      if (infra.cicdSteps.includes('Build')) {
-        stepsYaml.push('      - name: Production Build\n        run: ' + (language === 'Python' ? 'echo "No build step required for Python"' : 'npm run build'));
-      }
-      if (infra.cicdSteps.includes('Docker build & push')) {
-        let dockerBuildCmd = '';
-        if (backend.hasBackend && frontend.hasFrontend) {
-          dockerBuildCmd = '          docker build -t backend-service:latest ./backend\n          docker build -t frontend-service:latest ./frontend';
-        } else if (backend.hasBackend) {
-          dockerBuildCmd = '          docker build -t backend-service:latest ./backend';
-        } else if (frontend.hasFrontend) {
-          dockerBuildCmd = '          docker build -t frontend-service:latest ./frontend';
-        } else {
-          dockerBuildCmd = '          docker build -t app-service:latest .';
-        }
-        stepsYaml.push('      - name: Set up Docker Buildx\n        uses: docker/setup-buildx-action@v2\n      - name: Build Docker Images\n        run: |\n' + dockerBuildCmd);
-      }
-      if (infra.cicdSteps.includes('Deploy staging')) {
-        stepsYaml.push('      - name: Deploy to Staging\n        run: echo "Deploying to staging environment..."');
-      }
-      if (infra.cicdSteps.includes('Deploy production')) {
-        stepsYaml.push('      - name: Deploy to Production\n        run: echo "Deploying to production environment..."');
-      }
-
-      parts.push('```yaml');
-      parts.push('# .github/workflows/ci.yml');
-      parts.push('name: CI/CD Pipeline');
-      parts.push('');
-      parts.push('on:');
-      parts.push('  push:');
-      parts.push('    branches: [ main, master ]');
-      parts.push('  pull_request:');
-      parts.push('    branches: [ main, master ]');
-      parts.push('');
-      parts.push('jobs:');
-      parts.push('  pipeline:');
-      parts.push('    runs-on: ubuntu-latest');
-      parts.push('    steps:');
-      parts.push('      - name: Checkout Code');
-      parts.push('        uses: actions/checkout@v3');
-      if (language === 'Python') {
-        parts.push('      - name: Set up Python');
-        parts.push('        uses: actions/setup-python@v4');
-        parts.push('        with:');
-        parts.push('          python-version: "3.11"');
-        parts.push('      - name: Install Dependencies');
-        parts.push('        run: pip install -r requirements.txt');
-      } else {
-        parts.push('      - name: Set up Node.js');
-        parts.push('        uses: actions/setup-node@v3');
-        parts.push('        with:');
-        parts.push('          node-version: "20"');
-        parts.push('          cache: "npm"');
-        parts.push('      - name: Install Dependencies');
-        parts.push('        run: npm ci');
-      }
-      parts.push(stepsYaml.join('\n'));
-      parts.push('```');
-    } else if (infra.cicdPlatform === 'GitLab CI') {
-      parts.push('```yaml');
-      parts.push('# .gitlab-ci.yml');
-      parts.push('stages:');
-      parts.push('  - test');
-      parts.push('  - build');
-      parts.push('  - deploy');
-      parts.push('');
-      parts.push('pipeline_job:');
-      parts.push('  image: ' + (language === 'Python' ? 'python:3.11' : 'node:20'));
-      parts.push('  stage: test');
-      parts.push('  script:');
-      if (language === 'Python') {
-        parts.push('    - pip install -r requirements.txt');
-        if (infra.cicdSteps.includes('Lint')) parts.push('    - pip install ruff && ruff check .');
-        if (infra.cicdSteps.includes('Unit tests')) parts.push('    - pytest');
-      } else {
-        parts.push('    - npm ci');
-        if (infra.cicdSteps.includes('Lint')) parts.push('    - npm run lint');
-        if (infra.cicdSteps.includes('Unit tests')) parts.push('    - npm run test');
-        if (infra.cicdSteps.includes('Build')) parts.push('    - npm run build');
-      }
-      parts.push('```');
-    } else {
-      parts.push(`Include a standard pipeline config for **${infra.cicdPlatform}** executing: ${infra.cicdSteps.join(', ')}.`);
-    }
-    parts.push('');
-  }
-
-  if (infra.codeQuality.length > 0) {
-    parts.push('### Code Quality Tools');
-    parts.push(bullet(infra.codeQuality));
-    parts.push('');
-    // BUG FIX: Python projects now select Ruff/Black/mypy/pre-commit instead of ESLint/Prettier/Husky.
-    // The notes block must emit the correct config instructions per tool, not assume JS/TS tooling.
-    const notes = [
-      // TypeScript / JS tools
-      infra.codeQuality.includes('ESLint') && '- **ESLint**: `eslint.config.mjs` (flat config). Use `@typescript-eslint/recommended` + framework plugin.',
-      infra.codeQuality.includes('Prettier') && '- **Prettier**: `.prettierrc` → `{ "singleQuote": true, "semi": true, "printWidth": 100 }`.',
-      infra.codeQuality.includes('Husky') && '- **Husky**: `npx husky init` → add `pre-commit` (lint-staged) and `commit-msg` (commitlint) hooks.',
-      infra.codeQuality.includes('lint-staged') && '- **lint-staged**: in `package.json` → run ESLint + Prettier on staged `*.ts` / `*.tsx` files.',
-      infra.codeQuality.includes('Commitlint') && '- **Commitlint**: `@commitlint/config-conventional` + commit-msg Husky hook.',
-      // Python tools
-      infra.codeQuality.includes('Ruff') && '- **Ruff**: `pyproject.toml` → `[tool.ruff]` section. Run `ruff check . --fix` for linting and `ruff format .` for formatting. Replaces Flake8, isort, and Black in a single tool.',
-      infra.codeQuality.includes('Black') && '- **Black**: `pyproject.toml` → `[tool.black]` with `line-length = 100`. Run `black .` to format. Skip if using Ruff (Ruff formatter is a superset of Black).',
-      infra.codeQuality.includes('mypy') && '- **mypy**: `pyproject.toml` → `[tool.mypy]` section. Run `mypy .` for static type analysis. Set `strict = true` progressively.',
-      infra.codeQuality.includes('pre-commit') && '- **pre-commit**: `.pre-commit-config.yaml` at project root. Add hooks for Ruff, Black, and mypy. Run `pre-commit install` after cloning.',
-      // Universal tools
-      infra.codeQuality.includes('SonarQube') && '- **SonarQube**: `sonar-project.properties` at root. Set `sonar.sources`, `sonar.tests`, coverage exclusions.',
-    ].filter(Boolean);
-    if (notes.length > 0) parts.push(...notes, '');
-
-    // ── JS/TS quality tool config snippets ───────────────────────────────────
-    if (infra.codeQuality.includes('ESLint')) {
-      parts.push('#### eslint.config.mjs (ESLint Flat Config)');
-      parts.push('```javascript');
-      parts.push('import js from "@eslint/js";');
-      parts.push('import ts from "@typescript-eslint/eslint-plugin";');
-      parts.push('import tsParser from "@typescript-eslint/parser";');
-      parts.push('');
-      parts.push('export default [');
-      parts.push('  js.configs.recommended,');
-      parts.push('  {');
-      parts.push('    files: ["**/*.ts", "**/*.tsx"],');
-      parts.push('    languageOptions: {');
-      parts.push('      parser: tsParser,');
-      parts.push('      parserOptions: {');
-      parts.push('        ecmaVersion: "latest",');
-      parts.push('        sourceType: "module",');
-      parts.push('      },');
-      parts.push('    },');
-      parts.push('    plugins: {');
-      parts.push('      "@typescript-eslint": ts,');
-      parts.push('    },');
-      parts.push('    rules: {');
-      parts.push('      "@typescript-eslint/no-unused-vars": "warn",');
-      parts.push('      "no-console": ["warn", { allow: ["warn", "error", "info"] }],');
-      parts.push('    },');
-      parts.push('  },');
-      parts.push('];');
-      parts.push('```');
-      parts.push('');
-    }
-    if (infra.codeQuality.includes('Prettier')) {
-      parts.push('#### .prettierrc (Prettier Formatting Configuration)');
-      parts.push('```json');
-      parts.push('{');
-      parts.push('  "singleQuote": true,');
-      parts.push('  "semi": true,');
-      parts.push('  "printWidth": 100,');
-      parts.push('  "tabWidth": 2,');
-      parts.push('  "trailingComma": "all"');
-      parts.push('}');
-      parts.push('```');
-      parts.push('');
-    }
-    if (infra.codeQuality.includes('lint-staged')) {
-      parts.push('#### lint-staged (Add to package.json)');
-      parts.push('```json');
-      parts.push('{');
-      parts.push('  "lint-staged": {');
-      parts.push('    "*.{ts,tsx,js,jsx}": [');
-      parts.push('      "eslint --fix",');
-      parts.push('      "prettier --write"');
-      parts.push('    ]');
-      parts.push('  }');
-      parts.push('}');
-      parts.push('```');
-      parts.push('');
-    }
-    // ── Python quality tool config snippets ───────────────────────────────────
-    if (infra.codeQuality.includes('Ruff') || infra.codeQuality.includes('Black') || infra.codeQuality.includes('mypy')) {
-      parts.push('#### pyproject.toml (Python tool configuration)');
-      parts.push('```toml');
-      if (infra.codeQuality.includes('Ruff')) {
-        parts.push('[tool.ruff]');
-        parts.push('line-length = 100');
-        parts.push('target-version = "py311"');
-        parts.push('select = ["E", "F", "I", "B", "UP"]  # pycodestyle + pyflakes + isort + bugbear + pyupgrade');
-        parts.push('');
-        parts.push('[tool.ruff.format]');
-        parts.push('quote-style = "double"');
-        parts.push('indent-style = "space"');
-        parts.push('');
-      }
-      if (infra.codeQuality.includes('Black')) {
-        parts.push('[tool.black]');
-        parts.push('line-length = 100');
-        parts.push('target-version = ["py311"]');
-        parts.push('');
-      }
-      if (infra.codeQuality.includes('mypy')) {
-        parts.push('[tool.mypy]');
-        parts.push('python_version = "3.11"');
-        parts.push('strict = false');
-        parts.push('ignore_missing_imports = true');
-        parts.push('');
-      }
-      parts.push('```');
-      parts.push('');
-    }
-    if (infra.codeQuality.includes('pre-commit')) {
-      parts.push('#### .pre-commit-config.yaml (Python git hooks)');
-      parts.push('```yaml');
-      parts.push('repos:');
-      if (infra.codeQuality.includes('Ruff')) {
-        parts.push('  - repo: https://github.com/astral-sh/ruff-pre-commit');
-        parts.push('    rev: v0.4.4');
-        parts.push('    hooks:');
-        parts.push('      - id: ruff');
-        parts.push('        args: [--fix]');
-        parts.push('      - id: ruff-format');
-      }
-      if (infra.codeQuality.includes('Black') && !infra.codeQuality.includes('Ruff')) {
-        parts.push('  - repo: https://github.com/psf/black');
-        parts.push('    rev: 24.4.2');
-        parts.push('    hooks:');
-        parts.push('      - id: black');
-      }
-      if (infra.codeQuality.includes('mypy')) {
-        parts.push('  - repo: https://github.com/pre-commit/mirrors-mypy');
-        parts.push('    rev: v1.10.0');
-        parts.push('    hooks:');
-        parts.push('      - id: mypy');
-        parts.push('        additional_dependencies: [types-all]');
-      }
-      parts.push('```');
-      parts.push('');
-    }
-  }
-
-  if (infra.infraExtras.length > 0) {
-    parts.push('### Additional Infrastructure Configurations');
-    parts.push('');
-
-    if (infra.infraExtras.includes('Kubernetes')) {
-      parts.push('#### Kubernetes deployment.yaml');
-      parts.push('```yaml');
-      parts.push('# k8s/deployment.yaml');
-      parts.push('apiVersion: apps/v1');
-      parts.push('kind: Deployment');
-      parts.push('metadata:');
-      parts.push('  name: app-deployment');
-      parts.push('  labels:');
-      parts.push('    app: web');
-      parts.push('spec:');
-      parts.push('  replicas: 2');
-      parts.push('  selector:');
-      parts.push('    matchLabels:');
-      parts.push('      app: web');
-      parts.push('  template:');
-      parts.push('    metadata:');
-      parts.push('      labels:');
-      parts.push('        app: web');
-      parts.push('    spec:');
-      parts.push('      containers:');
-      parts.push('        - name: app');
-      parts.push('          image: app-service:latest');
-      parts.push('          ports:');
-      parts.push('            - containerPort: 8000');
-      parts.push('---');
-      parts.push('apiVersion: v1');
-      parts.push('kind: Service');
-      parts.push('metadata:');
-      parts.push('  name: app-service');
-      parts.push('spec:');
-      parts.push('  selector:');
-      parts.push('    app: web');
-      parts.push('  ports:');
-      parts.push('    - protocol: TCP');
-      parts.push('      port: 80');
-      parts.push('      targetPort: 8000');
-      parts.push('  type: ClusterIP');
-      parts.push('```');
-      parts.push('');
-    }
-
-    if (infra.infraExtras.includes('Nginx')) {
-      parts.push('#### Nginx reverse proxy configuration');
-      parts.push('```nginx');
-      parts.push('# nginx/nginx.conf');
-      parts.push('events { worker_connections 1024; }');
-      parts.push('');
-      parts.push('http {');
-      parts.push('    include       /etc/nginx/mime.types;');
-      parts.push('    default_type  application/octet-stream;');
-      parts.push('');
-      parts.push('    # Gzip Compression (Performance Compliance)');
-      parts.push('    gzip on;');
-      parts.push('    gzip_vary on;');
-      parts.push('    gzip_min_length 10240;');
-      parts.push('    gzip_proxied any;');
-      parts.push('    gzip_types text/plain text/css text/xml text/javascript application/javascript application/x-javascript application/xml application/json;');
-      parts.push('    gzip_disable "MSIE [1-6]\\.";');
-      parts.push('');
-      parts.push('    upstream backend_service {');
-      parts.push('        server backend:8000;');
-      parts.push('    }');
-      parts.push('');
-      parts.push('    upstream frontend_service {');
-      parts.push('        server frontend:3000;');
-      parts.push('    }');
-      parts.push('');
-      parts.push('    # HTTP Server (Redirect port 80 -> HTTPS port 443 in production)');
-      parts.push('    server {');
-      parts.push('        listen 80;');
-      parts.push('        server_name localhost;');
-      parts.push('');
-      parts.push('        # Uncomment to enforce SSL redirect in production:');
-      parts.push('        # return 301 https://$host$request_uri;');
-      parts.push('');
-      parts.push('        location /api {');
-      parts.push('            proxy_pass http://backend_service;');
-      parts.push('            proxy_set_header Host $host;');
-      parts.push('            proxy_set_header X-Real-IP $remote_addr;');
-      parts.push('            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;');
-      parts.push('        }');
-      parts.push('');
-      parts.push('        location / {');
-      parts.push('            proxy_pass http://frontend_service;');
-      parts.push('            proxy_set_header Host $host;');
-      parts.push('            proxy_set_header X-Real-IP $remote_addr;');
-      parts.push('        }');
-      parts.push('    }');
-      parts.push('');
-      parts.push('    # HTTPS Server (SSL/TLS configuration placeholder)');
-      parts.push('    # server {');
-      parts.push('    #     listen 443 ssl http2;');
-      parts.push('    #     server_name localhost;');
-      parts.push('    #');
-      parts.push('    #     ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;');
-      parts.push('    #     ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;');
-      parts.push('    #     ssl_protocols TLSv1.2 TLSv1.3;');
-      parts.push('    #     ssl_ciphers HIGH:!aNULL:!MD5;');
-      parts.push('    #');
-      parts.push('    #     location /api {');
-      parts.push('    #         proxy_pass http://backend_service;');
-      parts.push('    #         proxy_set_header Host $host;');
-      parts.push('    #         proxy_set_header X-Real-IP $remote_addr;');
-      parts.push('    #         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;');
-      parts.push('    #     }');
-      parts.push('    #');
-      parts.push('    #     location / {');
-      parts.push('    #         proxy_pass http://frontend_service;');
-      parts.push('    #         proxy_set_header Host $host;');
-      parts.push('    #         proxy_set_header X-Real-IP $remote_addr;');
-      parts.push('    #     }');
-      parts.push('    # }');
-      parts.push('}');
-      parts.push('```');
-      parts.push('');
-    }
-
-    if (infra.infraExtras.includes('CDN')) {
-      parts.push('#### CDN Distribution rules');
-      parts.push('- **Origin settings**: Route requests matching `/api/*` directly to target application servers.');
-      parts.push('- **Caching policies**: Configure cache duration headers (`Cache-Control: public, max-age=31536000`) for all frontend `/static/*` and `/_next/*` asset directories.');
-      parts.push('- **SSL Requirement**: Force HTTPS redirect at edge routing layer.');
-      parts.push('');
-    }
-
-    if (infra.infraExtras.includes("Let's Encrypt SSL")) {
-      parts.push('#### Let\'s Encrypt Certificate setup script');
-      parts.push('```bash');
-      parts.push('# provision-ssl.sh');
-      parts.push('# Install Certbot');
-      parts.push('sudo apt-get update && sudo apt-get install -y certbot python3-certbot-nginx');
-      parts.push('');
-      parts.push('# Request certificate (replace example.com)');
-      parts.push('# sudo certbot --nginx -d example.com -d www.example.com --non-interactive --agree-tos -m admin@example.com');
-      parts.push('```');
-      parts.push('');
-    }
-
-    if (infra.infraExtras.includes('Secrets Management')) {
-      parts.push('#### Secrets Management Configuration');
-      parts.push('- **Environment Variable Mapping**: Inject secrets at runtime instead of hardcoding.');
-      parts.push('- **AWS Secrets Manager / HashiCorp Vault Integration**:');
-      parts.push('  - Store DB passwords, API keys, and private tokens securely.');
-      parts.push('  - Query credentials dynamically on app initialization or inject them as environment variables in the container definition.');
-      parts.push('');
-    }
-  }
-
-  if (infra.hasTerraform) {
-    parts.push('### Terraform Infrastructure Configuration');
-    parts.push('');
-    parts.push('Place the IaC manifest in the `terraform/` directory.');
-    parts.push('');
-
-    let providerBlock = '';
-    let resourceBlock = '';
-
-    if (infra.cloud === 'AWS') {
-      providerBlock = 'provider "aws" {\n  region = "us-east-1"\n}';
-      resourceBlock = 'resource "aws_vpc" "main" {\n  cidr_block = "10.0.0.0/16"\n  enable_dns_hostnames = true\n  tags = {\n    Name = "main-vpc"\n  }\n}';
-    } else if (infra.cloud === 'Azure') {
-      providerBlock = 'provider "azurerm" {\n  features {}\n}';
-      resourceBlock = 'resource "azurerm_resource_group" "main" {\n  name     = "app-resources"\n  location = "East US"\n}';
-    } else if (infra.cloud === 'GCP') {
-      providerBlock = 'provider "google" {\n  project = "my-gcp-project"\n  region  = "us-central1"\n}';
-      resourceBlock = 'resource "google_compute_network" "vpc_network" {\n  name = "terraform-network"\n}';
-    } else {
-      providerBlock = 'provider "local" {}';
-      resourceBlock = '# Define platform resources matching your custom cloud configuration here.';
-    }
-
-    parts.push('```hcl');
-    parts.push('# terraform/main.tf');
-    parts.push(providerBlock);
-    parts.push('');
-    parts.push('terraform {');
-    parts.push('  required_version = ">= 1.5.0"');
-    parts.push('  required_providers {');
-    if (infra.cloud === 'AWS') {
-      parts.push('    aws = {\n      source  = "hashicorp/aws"\n      version = "~> 5.0"\n    }');
-    } else if (infra.cloud === 'Azure') {
-      parts.push('    azurerm = {\n      source  = "hashicorp/azurerm"\n      version = "~> 3.0"\n    }');
-    } else if (infra.cloud === 'GCP') {
-      parts.push('    google = {\n      source  = "hashicorp/google"\n      version = "~> 4.0"\n    }');
-    } else {
-      parts.push('    local = {\n      source  = "hashicorp/local"\n      version = "~> 2.0"\n    }');
-    }
-    parts.push('  }');
-    parts.push('}');
-    parts.push('');
-    parts.push(resourceBlock);
-    parts.push('```');
-    parts.push('');
-  }
-
   parts.push('---', '');
   return parts.join('\n');
 }
 
-function buildQuality({ quality }) {
+function buildQuality({ quality, language }) {
   if (quality.testingFramework === 'None')
     return '## 7. Testing & Quality Assurance\n_No testing framework selected._\n\n---\n\n';
 
-  const testTypesBlock = quality.testTypes.length > 0
-    ? `\n### Test Types\n${bullet(quality.testTypes)}\n` : '';
+  const ext = language === 'JavaScript' ? 'js' : 'ts';
 
   const coverageBlock = quality.hasCoverage
     ? '\n### Coverage Thresholds\nMinimum 80% for lines, functions, and branches. Fail CI if not met.\n' : '';
@@ -1492,11 +1197,11 @@ function buildQuality({ quality }) {
     ? '\n### Cypress Setup (mandatory — do not skip)\n' +
     '- Install: `cypress @testing-library/cypress`\n' +
     '- Initialize with `npx cypress open` on first run to scaffold the `cypress/` directory structure.\n' +
-    '- Create `cypress.config.ts` at the **project root** with `baseUrl` pointing to the frontend dev server (e.g. `http://localhost:3000`).\n' +
-    '- Place E2E test files under `cypress/e2e/` with `.cy.ts` extension.\n' +
-    '- Add custom commands in `cypress/support/commands.ts`.\n' +
+    `- Create \`cypress.config.${ext}\` at the **project root** with \`baseUrl\` pointing to the frontend dev server (e.g. \`http://localhost:3000\`).\n` +
+    `- Place E2E test files under \`cypress/e2e/\` with \`.cy.${ext}\` extension.\n` +
+    `- Add custom commands in \`cypress/support/commands.${ext}\`.\n` +
     '- Add to root `package.json`: `"test:e2e": "cypress run"` and `"test:e2e:open": "cypress open"`.\n' +
-    '- **Write at least one smoke test** (`cypress/e2e/app.cy.ts`) that visits the home page and asserts the page loads without error.\n'
+    `- **Write at least one smoke test** (\`cypress/e2e/app.cy.${ext}\`) that visits the home page and asserts the page loads without error.\n`
     : '';
 
   // Playwright-specific setup instructions — do not skip initialization
@@ -1504,11 +1209,11 @@ function buildQuality({ quality }) {
     ? '\n### Playwright Setup (mandatory — do not skip)\n' +
     '- Install: `@playwright/test`\n' +
     '- Initialize with `npx playwright install` to download browser binaries (Chromium, Firefox, WebKit).\n' +
-    '- Create `playwright.config.ts` at the **project root** with `baseURL` pointing to the frontend dev server (e.g. `http://localhost:3000`).\n' +
-    '- Place test files under `playwright/` or `tests/` with `.spec.ts` extension.\n' +
+    `- Create \`playwright.config.${ext}\` at the **project root** with \`baseURL\` pointing to the frontend dev server (e.g. \`http://localhost:3000\`).\n` +
+    `- Place test files under \`playwright/\` or \`tests/\` with \`.spec.${ext}\` extension.\n` +
     '- Add to root `package.json`: `"test:e2e": "playwright test"` and `"test:e2e:ui": "playwright test --ui"`.\n' +
-    '- **Write at least one smoke test** (`tests/app.spec.ts`) that navigates to the home page and asserts the title/heading is visible.\n' +
-    '- Configure `reporter: [[\'html\', { open: \'never\' }]]` in `playwright.config.ts` for CI compatibility.\n'
+    `- **Write at least one smoke test** (\`tests/app.spec.${ext}\`) that navigates to the home page and asserts the title/heading is visible.\n` +
+    `- Configure \`reporter: [['html', { open: 'never' }]]\` in \`playwright.config.${ext}\` for CI compatibility.\n`
     : '';
 
   return [
@@ -1518,7 +1223,6 @@ function buildQuality({ quality }) {
     '|:---|:---|',
     `| **Testing Framework** | \`${quality.testingFramework}\` |`,
     `| **Coverage Enforced** | \`${yesNo(quality.hasCoverage)}\` |`,
-    testTypesBlock,
     coverageBlock,
     cypressBlock,
     playwrightBlock,
@@ -1567,27 +1271,28 @@ function buildBackendTreeLines(backend, database, auth, infra, language) {
 
   } else if (['Express.js', 'Fastify', 'Hono'].includes(backend.framework)) {
     // FIX: Express / Fastify / Hono use routes-based architecture — NOT NestJS module pattern.
-    const mainFile = backend.framework === 'Hono' ? 'index.ts' : 'server.ts';
+    const ext = language === 'JavaScript' ? 'js' : 'ts';
+    const mainFile = backend.framework === 'Hono' ? `index.${ext}` : `server.${ext}`;
     L.push('│   ├── src/');
     L.push(`│   │   ├── ${mainFile}`);
     L.push('│   │   ├── routes/');
-    L.push('│   │   │   ├── health.ts');
-    if (auth.hasAuth) L.push('│   │   │   ├── auth.ts');
-    L.push('│   │   │   └── users.ts');
+    L.push(`│   │   │   ├── health.${ext}`);
+    if (auth.hasAuth) L.push(`│   │   │   ├── auth.${ext}`);
+    L.push(`│   │   │   └── users.${ext}`);
     L.push('│   │   ├── controllers/');
-    L.push('│   │   │   ├── health.controller.ts');
-    if (auth.hasAuth) L.push('│   │   │   ├── auth.controller.ts');
-    L.push('│   │   │   └── users.controller.ts');
+    L.push(`│   │   │   ├── health.controller.${ext}`);
+    if (auth.hasAuth) L.push(`│   │   │   ├── auth.controller.${ext}`);
+    L.push(`│   │   │   └── users.controller.${ext}`);
     L.push('│   │   ├── services/');
-    if (auth.hasAuth) L.push('│   │   │   ├── auth.service.ts');
-    L.push('│   │   │   └── users.service.ts');
+    if (auth.hasAuth) L.push(`│   │   │   ├── auth.service.${ext}`);
+    L.push(`│   │   │   └── users.service.${ext}`);
     L.push('│   │   ├── middleware/');
-    L.push('│   │   │   ├── auth.middleware.ts');
-    L.push('│   │   │   └── error.middleware.ts');
+    L.push(`│   │   │   ├── auth.middleware.${ext}`);
+    L.push(`│   │   │   └── error.middleware.${ext}`);
     L.push('│   │   ├── types/');
-    L.push('│   │   │   └── index.ts');
+    L.push(`│   │   │   └── index.${ext}`);
     L.push('│   │   └── config/');
-    L.push('│   │       └── configuration.ts');
+    L.push(`│   │       └── configuration.${ext}`);
 
   } else if (backend.framework === 'FastAPI') {
     L.push('│   ├── app/');
@@ -1635,14 +1340,15 @@ function buildBackendTreeLines(backend, database, auth, infra, language) {
 
   // ORM / migration files
   if (database.hasDatabase) {
+    const ext = language === 'JavaScript' ? 'js' : 'ts';
     if (database.orm === 'Prisma') {
       L.push('│   ├── prisma/');
       L.push('│   │   ├── schema.prisma');
       L.push('│   │   └── migrations/');
-      if (database.hasSeed) L.push('│   │   └── seed.ts');
+      if (database.hasSeed) L.push(`│   │   └── seed.${ext}`);
     } else if (database.orm === 'Drizzle ORM') {
       L.push('│   ├── drizzle/');
-      L.push('│   │   ├── schema.ts');
+      L.push(`│   │   ├── schema.${ext}`);
       L.push('│   │   └── migrations/');
     } else if (database.orm === 'SQLAlchemy' || database.orm === 'Tortoise ORM') {
       L.push('│   ├── alembic/');
@@ -1676,52 +1382,56 @@ function buildBackendTreeLines(backend, database, auth, infra, language) {
   return L;
 }
 
-function buildFrontendTreeLines(frontend, auth, infra) {
+function buildFrontendTreeLines(frontend, auth, infra, language) {
   const L = [];
   if (!frontend.hasFrontend) return L;
+
+  const isTS = language === 'TypeScript';
+  const ext = isTS ? 'ts' : 'js';
+  const jsxExt = isTS ? 'tsx' : 'jsx';
 
   // frontend is always last — use └── at root
   L.push('└── frontend/');
 
   if (frontend.framework === 'Next.js') {
     L.push('    ├── app/');
-    L.push('    │   ├── layout.tsx');
-    L.push('    │   ├── page.tsx');
+    L.push(`    │   ├── layout.${jsxExt}`);
+    L.push(`    │   ├── page.${jsxExt}`);
     L.push('    │   ├── globals.css');
     if (auth.hasAuth) {
       L.push('    │   ├── (auth)/');
       L.push('    │   │   ├── login/');
-      L.push('    │   │   │   └── page.tsx');
+      L.push(`    │   │   │   └── page.${jsxExt}`);
       L.push('    │   │   └── register/');
-      L.push('    │   │       └── page.tsx');
+      L.push(`    │   │       └── page.${jsxExt}`);
     }
     L.push('    │   └── (dashboard)/');
-    L.push('    │       ├── layout.tsx');
+    L.push(`    │       ├── layout.${jsxExt}`);
     L.push('    │       └── dashboard/');
-    L.push('    │           ├── page.tsx');
+    L.push(`    │           ├── page.${jsxExt}`);
     L.push('    │           └── users/');
-    L.push('    │               └── page.tsx');
+    L.push(`    │               └── page.${jsxExt}`);
     L.push('    ├── components/');
     L.push('    │   ├── ui/');
     L.push('    │   ├── layouts/');
     L.push('    │   └── forms/');
     L.push('    ├── lib/');
-    L.push('    │   ├── api.ts');
-    L.push('    │   └── utils.ts');
+    L.push(`    │   ├── api.${ext}`);
+    L.push(`    │   └── utils.${ext}`);
     L.push('    ├── hooks/');
     if (['Zustand', 'Redux Toolkit', 'Jotai'].includes(frontend.stateManagement)) {
       L.push('    ├── store/');
     }
-    L.push('    ├── types/');
+    if (isTS) L.push('    ├── types/');
     L.push('    ├── public/');
     L.push('    ├── .env.local.example');
-    L.push('    ├── next.config.ts');
-    L.push('    ├── tsconfig.json');
-    if (frontend.styling.includes('Tailwind')) L.push('    ├── tailwind.config.ts');
+    L.push(`    ├── next.config.${ext}`);
+    if (isTS) L.push('    ├── tsconfig.json');
+    if (frontend.styling.includes('Tailwind')) L.push(`    ├── tailwind.config.${ext}`);
   } else if (frontend.framework === 'React + Vite') {
     L.push('    ├── src/');
-    L.push('    │   ├── main.tsx');
-    L.push('    │   ├── App.tsx');
+    L.push(`    │   ├── main.${jsxExt}`);
+    L.push(`    │   ├── App.${jsxExt}`);
     L.push('    │   ├── components/');
     L.push('    │   │   ├── ui/');
     L.push('    │   │   └── layouts/');
@@ -1729,15 +1439,15 @@ function buildFrontendTreeLines(frontend, auth, infra) {
     L.push('    │   ├── pages/');
     L.push('    │   ├── hooks/');
     L.push('    │   ├── lib/');
-    L.push('    │   │   └── api.ts');
+    L.push(`    │   │   └── api.${ext}`);
     if (frontend.stateManagement !== 'None') L.push('    │   ├── store/');
-    L.push('    │   ├── types/');
+    if (isTS) L.push('    │   ├── types/');
     L.push('    │   └── styles/');
     L.push('    ├── public/');
     L.push('    ├── .env.example');
-    L.push('    ├── vite.config.ts');
-    L.push('    ├── tsconfig.json');
-    if (frontend.styling.includes('Tailwind')) L.push('    ├── tailwind.config.ts');
+    L.push(`    ├── vite.config.${ext}`);
+    if (isTS) L.push('    ├── tsconfig.json');
+    if (frontend.styling.includes('Tailwind')) L.push(`    ├── tailwind.config.${ext}`);
   } else if (frontend.framework === 'Nuxt 3') {
     L.push('    ├── pages/');
     L.push('    │   ├── index.vue');
@@ -1753,8 +1463,8 @@ function buildFrontendTreeLines(frontend, auth, infra) {
     L.push('    │   └── css/');
     L.push('    ├── public/');
     L.push('    ├── .env.example');
-    L.push('    ├── nuxt.config.ts');
-    L.push('    └── tsconfig.json');
+    L.push(`    ├── nuxt.config.${ext}`);
+    if (isTS) L.push('    ├── tsconfig.json');
   } else if (frontend.framework === 'SvelteKit') {
     L.push('    ├── src/');
     L.push('    │   ├── app.html');
@@ -1762,7 +1472,7 @@ function buildFrontendTreeLines(frontend, auth, infra) {
     L.push('    │   ├── lib/');
     L.push('    │   │   ├── components/');
     L.push('    │   │   ├── server/');
-    L.push('    │   │   └── utils.ts');
+    L.push(`    │   │   └── utils.${ext}`);
     L.push('    │   └── routes/');
     L.push('    │       ├── +layout.svelte');
     L.push('    │       ├── +page.svelte');
@@ -1772,12 +1482,30 @@ function buildFrontendTreeLines(frontend, auth, infra) {
     }
     L.push('    │       └── dashboard/');
     L.push('    │           ├── +page.svelte');
-    L.push('    │           └── +page.server.ts');
+    L.push(`    │           └── +page.server.${ext}`);
     L.push('    ├── static/');
     L.push('    ├── .env.example');
     L.push('    ├── svelte.config.js');
-    L.push('    ├── vite.config.ts');
-    L.push('    └── tsconfig.json');
+    L.push(`    ├── vite.config.${ext}`);
+    if (isTS) L.push('    ├── tsconfig.json');
+  }
+
+  if (frontend.frontendExtras && frontend.frontendExtras.includes('Jest + Testing Library')) {
+    L.push(`    ├── jest.config.${ext}`);
+    L.push(`    ├── jest.setup.${ext}`);
+  }
+  if (frontend.frontendExtras && frontend.frontendExtras.includes('Vitest + Testing Library')) {
+    L.push(`    ├── vitest.config.${ext}`);
+    L.push('    ├── test/');
+    L.push(`    │   └── setup.${ext}`);
+  }
+  if (frontend.frontendExtras && frontend.frontendExtras.includes('MSW')) {
+    L.push('    ├── mocks/');
+    L.push(`    │   ├── handlers.${ext}`);
+    L.push(`    │   ├── browser.${ext}`);
+    if (['Next.js', 'Nuxt 3', 'SvelteKit'].includes(frontend.framework)) {
+      L.push(`    │   └── server.${ext}`);
+    }
   }
 
   if (infra.hasDocker) {
@@ -1819,19 +1547,6 @@ function buildDirectoryTree(answers) {
   L.push('├── .gitignore');
   L.push('├── README.md');
 
-  // Code quality root configs
-  if (infra.codeQuality.includes('ESLint')) L.push('├── eslint.config.mjs');
-  if (infra.codeQuality.includes('Prettier')) L.push('├── .prettierrc');
-  if (infra.codeQuality.includes('EditorConfig')) L.push('├── .editorconfig');
-  if (infra.codeQuality.includes('Commitlint')) L.push('├── commitlint.config.js');
-  if (infra.codeQuality.includes('Husky')) {
-    L.push('├── .husky/');
-    L.push('│   ├── pre-commit');
-    // FIX: Always include commit-msg hook when Husky + Commitlint are both selected
-    if (infra.codeQuality.includes('Commitlint')) L.push('│   └── commit-msg');
-    else L.push('│   └── pre-commit');
-  }
-
   // Assets
   L.push('├── assets/');
   L.push('│   ├── logo.svg');
@@ -1841,31 +1556,6 @@ function buildDirectoryTree(answers) {
 
   // Docker compose at project root
   if (infra.hasDocker) L.push('├── docker-compose.yml');
-
-  // CI/CD
-  if (infra.hasCICD) {
-    if (infra.cicdPlatform === 'GitHub Actions') {
-      L.push('├── .github/');
-      L.push('│   └── workflows/');
-      L.push('│       └── ci.yml');
-    } else if (infra.cicdPlatform === 'GitLab CI') {
-      L.push('├── .gitlab-ci.yml');
-    } else if (infra.cicdPlatform === 'CircleCI') {
-      L.push('├── .circleci/');
-      L.push('│   └── config.yml');
-    } else {
-      L.push(`├── .${infra.cicdPlatform.toLowerCase().replace(/\s+/g, '-')}-ci.yml`);
-    }
-  }
-
-  // Terraform
-  if (infra.hasTerraform) {
-    L.push('├── terraform/');
-    L.push('│   ├── main.tf');
-    L.push('│   ├── variables.tf');
-    L.push('│   ├── outputs.tf');
-    L.push('│   └── modules/');
-  }
 
   // Cypress E2E directory — project root level (only when Cypress is the selected test framework)
   if (quality && quality.testingFramework === 'Cypress') {
@@ -1895,7 +1585,7 @@ function buildDirectoryTree(answers) {
     : backendLines;
 
   L.push(...adjustedBackendLines);
-  L.push(...buildFrontendTreeLines(frontend, auth, infra));
+  L.push(...buildFrontendTreeLines(frontend, auth, infra, language));
 
   L.push('```');
 
@@ -1932,7 +1622,6 @@ function buildScaffoldInstructions(answers) {
     '1. **Root Foundations**',
     '   - Create `.gitignore`, `README.md`, root `package.json` / `pyproject.toml`.',
     '   - Generate `backend/.env.example` and `frontend/.env.local.example` with all variables from Sections 3 and 5.',
-    infra.codeQuality.length > 0 ? `   - Configure code quality tools: ${list(infra.codeQuality)}.` : '',
     '',
     `2. **Database Schema** *(${database.hasDatabase ? `${list(database.databases)} via ${database.orm}` : 'skipped — no database'})*`,
     database.hasDatabase
@@ -1951,7 +1640,7 @@ function buildScaffoldInstructions(answers) {
     '',
     `5. **Frontend Scaffold** *(${frontend.hasFrontend ? frontend.framework : 'skipped'})*`,
     frontend.hasFrontend
-      ? `   - Bootstrap with non-interactive CLI flags.\n   - Apply design tokens from \`shared_tokens.md\` — convert HEX → HSL.\n   - Implement dark/light theme toggle via \`data-theme\`.\n   - Dashboard shell with live connection indicator calling \`/api/health\`.`
+      ? `   - Bootstrap with non-interactive CLI flags.\n   - Apply design tokens from \`shared_tokens.md\` — convert HEX → HSL.\n   - ${frontend.themeSupport ? 'Implement dark/light theme toggle via `data-theme`.' : `Apply \`data-theme="${frontend.defaultTheme}"\` as the fixed theme — no toggle needed.`}\n   - Dashboard shell with live connection indicator calling \`/api/health\`.`
       : '   _Skipped._',
     '',
     `6. **Docker Orchestration** *(${infra.hasDocker ? 'enabled' : 'skipped'})*`,
@@ -1960,15 +1649,12 @@ function buildScaffoldInstructions(answers) {
       (infra.dockerFeatures && infra.dockerFeatures.includes('.dockerignore') ? `\n   - Write \`.dockerignore\` files for both backend and frontend as detailed in Section 6 to ignore \`node_modules\`, environment files, and build outputs.` : '')
       : '   _Skipped._',
     '',
-    `7. **CI/CD** *(${infra.hasCICD ? `${infra.cicdPlatform} — ${list(infra.cicdSteps)}` : 'skipped'})*`,
-    infra.hasCICD ? `   - Generate pipeline config running: ${list(infra.cicdSteps)}.` : '   _Skipped._',
-    '',
-    `8. **Tests** *(${quality.testingFramework !== 'None' ? `${quality.testingFramework} — ${list(quality.testTypes)}` : 'skipped'})*`,
+    `7. **Tests** *(${quality.testingFramework !== 'None' ? quality.testingFramework : 'skipped'})*`,
     quality.testingFramework !== 'None'
       ? `   - Scaffold test files alongside source files.\n   ${quality.hasCoverage ? '- Enforce 80% coverage thresholds in CI.' : ''}`
       : '   _Skipped._',
     '',
-    '9. **README.md**',
+    '8. **README.md**',
     '   - Local setup: clone → install → env setup → migrate → run',
     '   - All environment variables documented',
     '   - How to run tests and Docker',

@@ -17,7 +17,6 @@ Read `SPEC.md`, `ACCELERATOR_SPEC.md`, and `shared_tokens.md` completely before 
 - **Pydantic Validation Dependencies**: If using Pydantic v2 validation with `EmailStr` fields, always add `email-validator` to `requirements.txt`.
 - **HTTPX Client Testing Requirements**: If using `pytest` with `httpx` async test client, use `ASGITransport(app=app)` instead of directly passing `app` to `AsyncClient` to remain compliant with HTTPX 0.28+ APIs.
 - **SQLite Async Testing Dependencies**: If using async SQLAlchemy with in-memory SQLite (`sqlite+aiosqlite:///:memory:`) for testing, always add `aiosqlite` to `requirements.txt`.
-- If `Multi-Tenant: Yes` in SPEC Section 5 — register global tenant scoping at app bootstrap. NestJS: `{ provide: APP_INTERCEPTOR, useClass: TenantInterceptor }` in `app.module.ts` providers. Express/Fastify/Hono: `app.use(tenantMiddleware)` before all route handlers and apply `@CurrentTenant()`. FastAPI: use a `get_tenant_id` dependency to extract `tenant_id` from headers/claims and scope database sessions. Django: add `TenantMiddleware` with thread-local storage/context vars, and use a custom Model Manager to auto-filter queries by `tenant_id`. Every DB query touching tenant data MUST be scoped to the active tenant ID.
 - Implement **every auth method** listed in SPEC Section 5 with its own distinct UI — do not default to email/password for all methods. Magic Link → email input + "Send Magic Link" button only; OTP/SMS → phone input → 6-digit code two-step form; OAuth → branded provider button.
 
 ## L-2 Verification Step
@@ -39,7 +38,7 @@ Implement `GET /api/health` → `{ status: "ok" }` in the backend.
 - **Alembic async env.py**: The default `alembic init` scaffold is synchronous. Replace `alembic/env.py` with the async version using `run_async_migrations()` and `AsyncEngine.connect()`. The default sync env will crash with `MissingGreenlet` errors.
 - **Celery in Docker**: When Background Queues is enabled, add a separate `celery` service to `docker-compose.yml` sharing the same `env_file` and network as `backend`. Command: `celery -A app.core.celery_app worker --loglevel=info`. Must `depend_on` the `redis` service.
 - **Redis caching (Python)**: Use `redis.asyncio` (from the `redis` package), not `ioredis`. Create `app/core/redis.py` with `redis.asyncio.from_url(REDIS_URL, retry_on_timeout=True)`.
-- **Email service (Python)**: Use `fastapi-mail` (SMTP) or `resend` (API). Do NOT use Nodemailer.
+- **Email service (Python)**: Default to Azure/Microsoft Graph API for mail delivery.
 - **File uploads (Python)**: Use `boto3` + `python-multipart`. Do NOT use `@aws-sdk/client-s3` or `multer`.
 - **WebSockets (FastAPI)**: Use FastAPI's native `@router.websocket()` — no extra package needed. Do NOT install `socket.io`.
 - **WebSockets (Django)**: Install `channels channels-redis`. Replace `asgi.py` with `ProtocolTypeRouter`.

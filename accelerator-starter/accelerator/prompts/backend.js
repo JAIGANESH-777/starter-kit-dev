@@ -1,39 +1,42 @@
 import { select, checkbox, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 
-export async function askBackend(projectType, language) {
+export async function askBackend(projectType, apiStyle) {
   if (projectType === 'frontend') {
-    return { hasBackend: false };
+    return { hasBackend: false, language: 'TypeScript' };
   }
 
   console.log(chalk.bold.white('\n── ⚙️  Backend ─────────────────────────────────────\n'));
 
-  const frameworkChoices = language === 'Python'
-    ? [
-        { name: 'FastAPI — async, high-performance (recommended)', value: 'FastAPI' },
-        { name: 'Django — batteries-included, admin UI', value: 'Django' },
-      ]
-    : [
-        { name: 'NestJS — opinionated, modular, TypeScript-first (recommended)', value: 'NestJS' },
-        { name: 'Express.js — minimal, flexible, widely used', value: 'Express.js' },
-        { name: 'Fastify — fast, low-overhead alternative to Express', value: 'Fastify' },
-        { name: 'Hono — edge-ready, ultra-lightweight', value: 'Hono' },
-      ];
+  const frameworkChoices = [
+    { name: chalk.bold('── JavaScript / TypeScript ──'), value: '__separator_js__', disabled: ' ' },
+    { name: 'NestJS — opinionated, modular, TypeScript-first (recommended)', value: 'NestJS' },
+    { name: 'Express.js — minimal, flexible, widely used', value: 'Express.js' },
+    { name: 'Fastify — fast, low-overhead alternative to Express', value: 'Fastify' },
+    { name: 'Hono — edge-ready, ultra-lightweight', value: 'Hono' },
+    { name: chalk.bold('── Python ──'), value: '__separator_py__', disabled: ' ' },
+    { name: 'FastAPI — async, high-performance (recommended for Python)', value: 'FastAPI' },
+    { name: 'Django — batteries-included, admin UI', value: 'Django' },
+  ];
 
   const framework = await select({ message: 'Backend framework:', choices: frameworkChoices });
 
-  const apiStyle = await select({
-    message: 'API style:',
-    choices: [
-      { name: 'REST (recommended — universal, well-understood)', value: 'REST' },
-      { name: 'GraphQL (complex querying, flexible schema)', value: 'GraphQL' },
-      { name: 'REST + GraphQL hybrid', value: 'REST + GraphQL' },
-    ],
-  });
+  // ── Derive language from framework choice ──────────────────────────────────
+  const isPython = ['FastAPI', 'Django'].includes(framework);
+  let language = isPython ? 'Python' : 'TypeScript';
+
+  // ── TypeScript vs JavaScript — only for JS/TS stack ────────────────────────
+  if (!isPython) {
+    const useTypeScript = await confirm({
+      message: 'Use TypeScript?',
+      default: true,
+    });
+    language = useTypeScript ? 'TypeScript' : 'JavaScript';
+  }
 
   // Validation — Python frameworks use Pydantic; Node frameworks let you choose
   let validation;
-  if (language === 'Python') {
+  if (isPython) {
     validation = 'Pydantic v2';
   } else if (framework === 'NestJS') {
     validation = await select({
@@ -64,9 +67,8 @@ export async function askBackend(projectType, language) {
       { name: 'Background jobs / queues (BullMQ / Celery)', value: 'Background Queues' },
       { name: 'WebSockets (real-time)', value: 'WebSockets' },
       { name: 'File uploads (S3 / local)', value: 'File Uploads' },
-      { name: 'Email service (Nodemailer / Resend)', value: 'Email Service' },
     ],
   });
 
-  return { hasBackend: true, framework, apiStyle, validation, backendExtras };
+  return { hasBackend: true, framework, apiStyle, validation, backendExtras, language };
 }

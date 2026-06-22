@@ -9,7 +9,7 @@ import { writeSpec } from './writer.js';
 function printBanner() {
   console.clear();
   console.log('\n' + chalk.bold.cyan('╔══════════════════════════════════════════════════════╗'));
-  console.log(chalk.bold.cyan('║') + chalk.bold.white('    🛠  ACCELERATOR ENTERPRISE ARCHITECTURE COMPILER  ') + chalk.bold.cyan('║'));
+  console.log(chalk.bold.cyan('║') + chalk.bold.white('          🛠 ENTERPRISE ARCHITECTURE COMPILER          ') + chalk.bold.cyan('║'));
   console.log(chalk.bold.cyan('║') + chalk.gray('    Answer the prompts to generate your SPEC.md file  ') + chalk.bold.cyan('║'));
   console.log(chalk.bold.cyan('╚══════════════════════════════════════════════════════╝') + '\n');
 }
@@ -33,6 +33,9 @@ function printSummary(answers) {
   console.log(row('Name:', projectName));
   console.log(row('Type:', projectType));
   console.log(row('Language:', language));
+  if (backend.hasBackend) {
+    console.log(row('API Style:', backend.apiStyle));
+  }
 
   if (frontend.hasFrontend) {
     console.log('\n' + chalk.bold.white('  ── Frontend ────────────────────────────────────────'));
@@ -40,6 +43,7 @@ function printSummary(answers) {
     console.log(row('Styling:', frontend.styling));
     console.log(row('State:', frontend.stateManagement));
     console.log(row('Data Fetching:', frontend.dataFetching));
+    console.log(row('Theme:', frontend.themeSupport ? 'Dark + Light (toggle)' : `${frontend.defaultTheme} only`));
     if (frontend.frontendExtras?.length > 0)
       console.log(row('Extras:', list(frontend.frontendExtras)));
   }
@@ -47,7 +51,6 @@ function printSummary(answers) {
   if (backend.hasBackend) {
     console.log('\n' + chalk.bold.white('  ── Backend ─────────────────────────────────────────'));
     console.log(row('Framework:', backend.framework));
-    console.log(row('API Style:', backend.apiStyle));
     console.log(row('Validation:', backend.validation));
     if (backend.backendExtras?.length > 0)
       console.log(row('Features:', list(backend.backendExtras)));
@@ -55,9 +58,8 @@ function printSummary(answers) {
 
   if (database.hasDatabase) {
     console.log('\n' + chalk.bold.white('  ── Database ─────────────────────────────────────────'));
-    console.log(row('Databases:', list(database.databases)));
+    console.log(row('Database:', list(database.databases)));
     console.log(row('ORM:', database.orm));
-    console.log(row('Migrations:', yesno(database.hasMigrations)));
     console.log(row('Seed Scripts:', yesno(database.hasSeed)));
   } else {
     console.log('\n' + chalk.bold.white('  ── Database ─────────────────────────────────────────'));
@@ -69,25 +71,64 @@ function printSummary(answers) {
     console.log(row('Strategy:', auth.authStrategy));
     console.log(row('Provider:', auth.authProvider));
     console.log(row('Methods:', list(auth.authMethods)));
-    console.log(row('RBAC:', yesno(auth.hasRBAC)));
-    console.log(row('Multi-Tenant:', yesno(auth.hasMultiTenant)));
+    console.log(row('RBAC Roles:', list(auth.roles)));
   }
 
   console.log('\n' + chalk.bold.white('  ── Infrastructure ───────────────────────────────────'));
-  console.log(row('Cloud:', infra.cloud));
   console.log(row('Docker:', yesno(infra.hasDocker)));
-  console.log(row('CI/CD:', infra.hasCICD ? infra.cicdPlatform : chalk.dim('No')));
-  console.log(row('Terraform:', yesno(infra.hasTerraform)));
-  if (infra.codeQuality?.length > 0)
-    console.log(row('Code Quality:', list(infra.codeQuality)));
+  if (infra.hasDocker)
+    console.log(row('Docker Features:', list(infra.dockerFeatures)));
 
   console.log('\n' + chalk.bold.white('  ── Testing ──────────────────────────────────────────'));
   console.log(row('Framework:', quality.testingFramework));
-  if (quality.testTypes?.length > 0)
-    console.log(row('Test Types:', list(quality.testTypes)));
   console.log(row('Coverage:', yesno(quality.hasCoverage)));
 
   console.log('\n' + chalk.gray('  ─────────────────────────────────────────────────────') + '\n');
+}
+
+// ── Compatibility Check ──────────────────────────────────────────────────────
+
+function validateCompatibility(answers) {
+  const errors = [];
+  const warnings = [];
+
+  const { language, backend, database, quality } = answers;
+
+  // 1. Backend framework VS Language
+  if (backend.hasBackend) {
+    const isPythonFramework = ['FastAPI', 'Django'].includes(backend.framework);
+    if (isPythonFramework && language !== 'Python') {
+      errors.push(`Backend framework "${backend.framework}" is Python-based, but language is configured as "${language}".`);
+    }
+    if (!isPythonFramework && language === 'Python') {
+      errors.push(`Backend framework "${backend.framework}" is JS/TS-based, but language is configured as "Python".`);
+    }
+  }
+
+  // 2. Testing framework VS Language
+  if (quality.testingFramework && quality.testingFramework !== 'None') {
+    if (language === 'Python' && quality.testingFramework !== 'pytest') {
+      errors.push(`Testing framework is configured as "${quality.testingFramework}", but Python projects require "pytest".`);
+    }
+    if (language !== 'Python' && quality.testingFramework === 'pytest') {
+      errors.push(`Testing framework is configured as "pytest", but JS/TS projects require "Vitest", "Jest", or "Playwright".`);
+    }
+  }
+
+  // 3. Database ORM VS Language
+  if (database.hasDatabase && database.orm) {
+    const pythonORMs = ['SQLAlchemy', 'Tortoise ORM', 'Django ORM', 'Motor', 'MongoEngine'];
+    const jsORMs = ['Prisma', 'Drizzle ORM', 'TypeORM', 'Mongoose', 'Knex.js'];
+
+    if (language === 'Python' && jsORMs.some(orm => database.orm.includes(orm))) {
+      errors.push(`Database ORM "${database.orm}" is JS/TS-based, but language is configured as "Python".`);
+    }
+    if (language !== 'Python' && pythonORMs.some(orm => database.orm.includes(orm))) {
+      errors.push(`Database ORM "${database.orm}" is Python-based, but language is configured as "${language}".`);
+    }
+  }
+
+  return { errors, warnings };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -104,6 +145,20 @@ async function main() {
       process.exit(0);
     }
     throw err;
+  }
+
+  // Check for compatibility errors before summarizing
+  const { errors, warnings } = validateCompatibility(answers);
+  if (errors.length > 0) {
+    console.error(chalk.bold.red('\n❌ Compatibility Errors Detected:\n'));
+    errors.forEach((err) => console.error(chalk.red(`  • ${err}`)));
+    console.error(chalk.yellow('\nPlease run the installer again and select compatible options.\n'));
+    process.exit(1);
+  }
+  if (warnings.length > 0) {
+    console.warn(chalk.bold.yellow('\n⚠️ Compatibility Warnings:\n'));
+    warnings.forEach((warn) => console.warn(chalk.yellow(`  • ${warn}`)));
+    console.log();
   }
 
   // Show summary and ask for confirmation before writing

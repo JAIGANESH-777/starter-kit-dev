@@ -35,14 +35,10 @@ export async function askAuth(projectType, language, backendFramework = '') {
   });
 
   // ── Auth implementation library — scoped by language AND backendFramework ────
-  // This prevents incompatible choices such as Django Auth in a FastAPI project
-  // or Auth.js (Next.js-specific) in an Express backend.
   let authProvider;
 
   if (language === 'Python') {
     if (backendFramework === 'Django') {
-      // Django projects: django.contrib.auth is the natural built-in.
-      // Authlib is valid for OAuth flows alongside Django.
       authProvider = await select({
         message: 'Auth implementation:',
         choices: [
@@ -51,8 +47,7 @@ export async function askAuth(projectType, language, backendFramework = '') {
         ],
       });
     } else {
-      // FastAPI (or any other Python backend):
-      // Django Auth is excluded — it requires Django middleware stack.
+      // FastAPI (or any other Python backend)
       authProvider = await select({
         message: 'Auth implementation:',
         choices: [
@@ -63,20 +58,13 @@ export async function askAuth(projectType, language, backendFramework = '') {
     }
   } else {
     // TypeScript / JavaScript backends
-    // Filter provider choices by backendFramework where applicable.
     const tsProviderChoices = [
-      // Auth.js is designed for Next.js fullstack and SvelteKit; not a fit for API-only backends.
       ...(backendFramework === '' || ['NestJS', 'Express.js', 'Fastify', 'Hono'].includes(backendFramework)
         ? [{ name: 'Passport.js (recommended for NestJS / Express / Fastify)', value: 'Passport.js' }]
         : []),
-      // Auth.js: best fit for Next.js or SvelteKit (fullstack meta-frameworks).
-      // Still show for API-only but with a clear note.
       { name: 'Auth.js / NextAuth.js (best for Next.js fullstack)', value: 'Auth.js' },
       { name: 'Clerk — managed auth, zero backend auth code', value: 'Clerk' },
-      // Supabase Auth only makes sense when Supabase DB is also selected; show universally
-      // since the user may have already confirmed Supabase DB.
       { name: 'Supabase Auth — if using Supabase DB', value: 'Supabase Auth' },
-      // Cloud-provider specific options
       { name: 'AWS Cognito — if deploying on AWS', value: 'AWS Cognito' },
       { name: 'Keycloak — self-hosted identity server', value: 'Keycloak' },
       { name: 'Custom (in-house handlers)', value: 'Custom' },
@@ -84,25 +72,17 @@ export async function askAuth(projectType, language, backendFramework = '') {
     authProvider = await select({ message: 'Auth library / provider:', choices: tsProviderChoices });
   }
 
-  const hasRBAC = await confirm({ message: 'Include Role-Based Access Control (RBAC)?' });
-  let roles = [];
-  if (hasRBAC) {
-    roles = await checkbox({
-      message: 'Define roles: (space to select — you can customise after)',
-      choices: [
-        { name: 'super_admin', value: 'super_admin' },
-        { name: 'admin', value: 'admin' },
-        { name: 'manager', value: 'manager' },
-        { name: 'editor', value: 'editor' },
-        { name: 'viewer', value: 'viewer' },
-        { name: 'guest', value: 'guest' },
-      ],
-    });
-  }
+  // RBAC is always included with default roles — no user selection needed
+  const roles = ['admin', 'manager', 'editor', 'viewer'];
+  console.log(chalk.gray(`  ✔ RBAC enabled with default roles: ${roles.join(', ')}`));
 
-  const hasMultiTenant = await confirm({
-    message: 'Multi-tenant architecture? (separate data per organisation/team)',
-  });
-
-  return { hasAuth, authStrategy, authMethods, authProvider, hasRBAC, roles, hasMultiTenant };
+  return {
+    hasAuth,
+    authStrategy,
+    authMethods,
+    authProvider,
+    hasRBAC: true,
+    roles,
+    hasMultiTenant: false,
+  };
 }

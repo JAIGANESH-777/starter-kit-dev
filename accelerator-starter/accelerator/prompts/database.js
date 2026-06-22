@@ -1,4 +1,4 @@
-import { select, checkbox, confirm } from '@inquirer/prompts';
+import { select, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 
 export async function askDatabase(projectType, language, backendFramework = '') {
@@ -11,9 +11,7 @@ export async function askDatabase(projectType, language, backendFramework = '') 
   const hasDatabase = await confirm({ message: 'Include a database?' });
   if (!hasDatabase) return { hasDatabase: false };
 
-  // ── DB engine selection ──────────────────────────────────────────────────────
-  // Filter out cloud-managed options that only make sense with specific stacks.
-  // DynamoDB only makes sense for AWS-deployed projects; Supabase brings its own auth stack.
+  // ── DB engine selection (single-select) ────────────────────────────────────
   const dbChoices = [
     { name: 'PostgreSQL — production-grade relational (recommended)', value: 'PostgreSQL' },
     { name: 'MySQL / MariaDB', value: 'MySQL' },
@@ -22,7 +20,6 @@ export async function askDatabase(projectType, language, backendFramework = '') 
     { name: 'Redis — cache, sessions, pub-sub', value: 'Redis' },
     // Supabase only valid with TypeScript / JS stack (its client SDK is TS-first)
     ...(language !== 'Python' ? [{ name: 'Supabase — Postgres + realtime + auth', value: 'Supabase' }] : []),
-    // PlanetScale / DynamoDB are cloud-provider-specific; keep them for any stack
     { name: 'PlanetScale — serverless MySQL', value: 'PlanetScale' },
     { name: 'DynamoDB — AWS serverless NoSQL', value: 'DynamoDB' },
   ];
@@ -38,7 +35,6 @@ export async function askDatabase(projectType, language, backendFramework = '') 
   const hasRelational = databases.some((d) =>
     ['PostgreSQL', 'MySQL', 'SQLite', 'PlanetScale', 'Supabase'].includes(d),
   );
-  const hasMySQL      = databases.includes('MySQL') || databases.includes('PlanetScale');
 
   // ── ORM / query layer — strictly filtered by (language × backendFramework × dbEngine) ──
   let orm;
@@ -55,7 +51,6 @@ export async function askDatabase(projectType, language, backendFramework = '') 
       });
     } else if (backendFramework === 'Django') {
       // Django projects: Django ORM is the only sensible built-in choice.
-      // SQLAlchemy can co-exist with Django but that is a very unusual setup.
       orm = await select({
         message: 'ORM / query layer:',
         choices: [
@@ -65,7 +60,6 @@ export async function askDatabase(projectType, language, backendFramework = '') 
       });
     } else if (backendFramework === 'FastAPI' || backendFramework === '') {
       // FastAPI (or unspecified Python): async-native ORMs only.
-      // Django ORM is deliberately excluded — it is sync-only and requires django.setup().
       orm = await select({
         message: 'ORM / query layer:',
         choices: [
@@ -98,10 +92,10 @@ export async function askDatabase(projectType, language, backendFramework = '') 
     });
   } else {
     // Relational or mixed, TypeScript/JS stack
-    // TypeORM is only recommended alongside NestJS (decorator-based).
+    // Drizzle ORM is recommended for its minimal overhead and type-safe SQL builder.
     const ormChoices = [
-      { name: 'Prisma — type-safe, schema-first (recommended)', value: 'Prisma' },
-      { name: 'Drizzle ORM — type-safe SQL builder, minimal overhead', value: 'Drizzle ORM' },
+      { name: 'Drizzle ORM — type-safe SQL builder, minimal overhead (recommended)', value: 'Drizzle ORM' },
+      { name: 'Prisma — type-safe, schema-first', value: 'Prisma' },
       // TypeORM: show only if NestJS is selected (it's tightly coupled to NestJS decorators)
       ...(backendFramework === 'NestJS'
         ? [{ name: 'TypeORM — decorator-based, NestJS native', value: 'TypeORM' }]
@@ -113,8 +107,7 @@ export async function askDatabase(projectType, language, backendFramework = '') 
     orm = await select({ message: 'ORM / query layer:', choices: ormChoices });
   }
 
-  const hasMigrations = await confirm({ message: 'Include database migrations?' });
-  const hasSeed       = await confirm({ message: 'Include seed data scripts?' });
+  const hasSeed = await confirm({ message: 'Include seed data scripts?' });
 
   if (databases.includes('SQLite')) {
     console.log(chalk.yellow('\n  ⚠  SQLite selected: SQLite does not require a Docker container.'));
@@ -126,5 +119,5 @@ export async function askDatabase(projectType, language, backendFramework = '') 
     console.log(chalk.yellow('     No Docker container will be added — use AWS CLI or LocalStack for local dev.\n'));
   }
 
-  return { hasDatabase, databases, orm, hasMigrations, hasSeed };
+  return { hasDatabase, databases, orm, hasMigrations: true, hasSeed };
 }

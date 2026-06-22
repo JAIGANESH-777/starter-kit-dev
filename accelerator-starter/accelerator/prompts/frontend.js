@@ -59,23 +59,52 @@ export async function askFrontend(projectType) {
       ];
   const stateManagement = await select({ message: 'State management:', choices: stateChoices });
 
-  // Data fetching — compatible with the chosen framework
-  const fetchingChoices = framework.includes('Nuxt')
-    ? [
+  // ── Axios — asked separately as a standalone HTTP client decision ─────────
+  const useAxios = await confirm({
+    message: 'Use Axios for HTTP requests?',
+    default: true,
+  });
+
+  // ── Data fetching / cache layer — nested question ─────────────────────────
+  // TanStack Query, SWR, etc. are cache/state layers that sit on top of Axios or fetch.
+  let dataFetching;
+  if (framework.includes('Nuxt')) {
+    dataFetching = await select({
+      message: 'Data fetching / cache layer:',
+      choices: [
         { name: 'Nuxt useFetch / $fetch composables (recommended)', value: 'Nuxt useFetch' },
-        { name: 'TanStack Query + Axios', value: 'TanStack Query + Axios' },
-      ]
-    : framework.includes('Svelte')
-    ? [
-        { name: 'SvelteKit load functions + Axios (recommended)', value: 'SvelteKit load + Axios' },
+        { name: 'TanStack Query (Vue adapter)', value: 'TanStack Query' },
+      ],
+    });
+  } else if (framework.includes('Svelte')) {
+    dataFetching = await select({
+      message: 'Data fetching / cache layer:',
+      choices: [
+        { name: 'SvelteKit load functions (recommended)', value: 'SvelteKit load' },
         { name: 'TanStack Query (Svelte adapter)', value: 'TanStack Query' },
-      ]
-    : [
-        { name: 'TanStack Query + Axios (recommended)', value: 'TanStack Query + Axios' },
-        { name: 'SWR + Axios (lighter alternative)', value: 'SWR + Axios' },
-        { name: 'Plain fetch / Axios (no cache layer)', value: 'Plain fetch/Axios' },
-      ];
-  const dataFetching = await select({ message: 'Data fetching / server state:', choices: fetchingChoices });
+      ],
+    });
+  } else {
+    dataFetching = await select({
+      message: 'Data fetching / cache layer:',
+      choices: [
+        { name: 'TanStack Query (recommended — smart caching + refetching)', value: 'TanStack Query' },
+        { name: 'SWR (lighter alternative)', value: 'SWR' },
+        { name: 'Plain fetch (no cache layer)', value: 'Plain fetch' },
+      ],
+    });
+  }
+
+  // Combine Axios with the cache layer label for downstream rendering
+  if (useAxios && dataFetching === 'TanStack Query') {
+    dataFetching = 'TanStack Query + Axios';
+  } else if (useAxios && dataFetching === 'SWR') {
+    dataFetching = 'SWR + Axios';
+  } else if (useAxios && dataFetching === 'Plain fetch') {
+    dataFetching = 'Plain fetch/Axios';
+  } else if (useAxios && dataFetching === 'SvelteKit load') {
+    dataFetching = 'SvelteKit load + Axios';
+  }
 
   // Forms — only frameworks that pair naturally
   const formChoices = framework.includes('Nuxt')
@@ -96,13 +125,63 @@ export async function askFrontend(projectType) {
       ];
   const formHandling = await select({ message: 'Form handling:', choices: formChoices });
 
-  const frontendExtras = await checkbox({
-    message: 'Additional frontend tooling: (space to select, enter to skip)',
-    choices: [
-      { name: 'Dark mode support', value: 'Dark Mode' },
-      { name: 'Playwright (E2E tests)', value: 'Playwright' },
-    ],
+  // ── Theme support ─────────────────────────────────────────────────────────
+  const themeSupport = await confirm({
+    message: 'Include theme support (dark + light with toggle)?',
+    default: true,
   });
 
-  return { hasFrontend: true, framework, styling, stateManagement, dataFetching, formHandling, frontendExtras };
+  let defaultTheme = 'dark';
+  if (!themeSupport) {
+    defaultTheme = await select({
+      message: 'Default theme:',
+      choices: [
+        { name: 'Dark', value: 'dark' },
+        { name: 'Light', value: 'light' },
+      ],
+    });
+  }
+
+  // ── Additional frontend tooling ───────────────────────────────────────────
+  const extrasChoices = [
+    { name: 'Playwright (E2E frontend tests)', value: 'Playwright' },
+  ];
+
+  if (framework === 'Next.js') {
+    extrasChoices.push(
+      { name: 'Jest + React Testing Library (Unit/Component testing)', value: 'Jest + Testing Library' },
+      { name: 'Vitest + React Testing Library (Unit/Component testing)', value: 'Vitest + Testing Library' }
+    );
+  } else {
+    const testingLibraryLabel = framework.includes('Nuxt')
+      ? 'Vitest + Vue Test Utils (Unit/Component testing)'
+      : framework.includes('Svelte')
+      ? 'Vitest + Testing Library for Svelte (Unit/Component testing)'
+      : 'Vitest + React Testing Library (Unit/Component testing)';
+
+    extrasChoices.push(
+      { name: testingLibraryLabel, value: 'Vitest + Testing Library' }
+    );
+  }
+
+  extrasChoices.push(
+    { name: 'MSW (Mock Service Worker — API mocking)', value: 'MSW' }
+  );
+
+  const frontendExtras = await checkbox({
+    message: 'Additional frontend tooling: (space to select, enter to skip)',
+    choices: extrasChoices,
+  });
+
+  return {
+    hasFrontend: true,
+    framework,
+    styling,
+    stateManagement,
+    dataFetching,
+    formHandling,
+    themeSupport,
+    defaultTheme,
+    frontendExtras,
+  };
 }

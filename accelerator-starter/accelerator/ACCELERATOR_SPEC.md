@@ -43,15 +43,13 @@ project-root/
     │   │   ├── frontend.js ← framework, styling, state, fetching, forms
     │   │   ├── backend.js  ← framework, API style, validation, extras
     │   │   ├── database.js ← DB choice, ORM, migrations, seed
-    │   │   ├── auth.js     ← strategy, providers, RBAC, multi-tenant
-    │   │   ├── infra.js    ← cloud, Docker, CI/CD, code quality
+    │   │   ├── auth.js     ← strategy, providers, RBAC
     │   │   └── quality.js  ← test framework, test types, coverage
     │   ├── specs/          ← stack-specific variant specs
-    │   ├── snippets/       ← reusable code snippets for agents
-    │   └── terraform/      ← Terraform IaC modules
+    │   └── snippets/       ← reusable code snippets for agents
     │
     └── agents/             # Instructions and custom skills for AI coding agents
-        └── skills/         # 9 custom skills (api-contract, db-migration, devops-cloud, etc.)
+        └── skills/         # 8 custom skills (api-contract, db-migration, etc.)
 ```
 
 ---
@@ -86,8 +84,6 @@ database.js      → DB + ORM filtered by language + DB type (opt-in confirm)
   ↓
 auth.js          → strategy + providers, filtered by language (opt-in confirm)
   ↓
-infra.js         → cloud, Docker, CI/CD, code quality tools (all opt-in)
-  ↓
 quality.js       → test framework, test types, coverage
 ```
 
@@ -103,8 +99,8 @@ Every section with an opt-in `confirm` gate can be skipped — the renderer hand
 | 2 | Frontend | Framework, styling, state, env vars, design system bindings |
 | 3 | Backend | Framework, API style, validation, env vars, folder pattern, L-2 rule |
 | 4 | Database | DB + ORM, connection rules, migration commands, Docker compose YAML |
-| 5 | Auth | Strategy, providers, env vars, RBAC roles, multi-tenant flag |
-| 6 | Infrastructure | Cloud, Docker ports, CI/CD pipeline steps, code quality config hints |
+| 5 | Auth | Strategy, providers, env vars, RBAC roles |
+| 6 | Infrastructure | Docker ports, Docker compose configuration |
 | 7 | Testing | Framework, test types, coverage thresholds |
 | 8 | Directory Structure | Exact folder tree derived from all selections |
 | 9 | Scaffold Instructions | Numbered pipeline with skip labels, critical rules |
@@ -145,8 +141,7 @@ The full tree (with nested files per framework) is rendered in **Section 8** of 
 8. **L-2 Rule**: implement and verify `GET /api/health` returns HTTP 200 before any frontend code.
 9. Do not modify the root `docker-compose.yml` directly — use the generated service config.
 10. Frontend must expose port 3000, backend must expose port 8000.
-11. **Multi-Tenant Rule**: If multi-tenancy is active, register global tenant scoping at app bootstrap (guards, interceptors, middleware) and ensure every DB query is filtered by the resolved `tenantId`.
-12. **Auth UI Rule**: Implement a distinct UI form/flow for every selected authentication method (e.g. Google OAuth branded button, magic link email-only input, or two-step OTP/SMS flow) — never fallback to simple email+password forms for all methods.
+11. **Auth UI Rule**: Implement a distinct UI form/flow for every selected authentication method (e.g. Google OAuth branded button, magic link email-only input, or two-step OTP/SMS flow) — never fallback to simple email+password forms for all methods.
 
 ---
 
@@ -170,4 +165,3 @@ The full tree (with nested files per framework) is rendered in **Section 8** of 
 | `assets/logo-mark.svg` | Compact mark for collapsed sidebars and favicons |
 | `specs/` | Pre-built stack-specific SPEC variants for common combinations |
 | `snippets/` | Reusable code blocks the agent can reference |
-| `terraform/` | IaC modules for cloud provisioning |
