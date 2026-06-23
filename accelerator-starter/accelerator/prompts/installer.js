@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import chalk from 'chalk';
 import { confirm } from '@inquirer/prompts';
 import { runPrompts } from './index.js';
