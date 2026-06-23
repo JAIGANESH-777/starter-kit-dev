@@ -1,6 +1,6 @@
 {
   "name": "@jaiganesh-777/starter-kit-dev",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "main": "accelerator-starter/accelerator/prompts/installer.js",
   "bin": {
