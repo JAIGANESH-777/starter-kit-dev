@@ -18,7 +18,7 @@ Write-Host "✅ .npmrc configured!" -ForegroundColor Green
 
 # Step 3 - Install
 Write-Host "⏳ Installing package..." -ForegroundColor Cyan
-npm install -g @jaiganesh-777/starter-kit-dev
+npm install @jaiganesh-777/starter-kit-dev
 
 Write-Host ""
 Write-Host "🎉 All done! Run the kit with:" -ForegroundColor Green
