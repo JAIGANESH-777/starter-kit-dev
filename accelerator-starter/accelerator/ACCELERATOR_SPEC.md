@@ -120,8 +120,8 @@ The generated `SPEC.md` instructs the AI to create this root layout:
 ├── .gitignore
 ├── README.md
 ├── assets/
-├── backend/          ← if backend selected
-├── frontend/         ← if frontend selected
+├── backend/          ← if backend selected (includes own README.md)
+├── frontend/         ← if frontend selected (includes own README.md)
 └── docker-compose.yml ← if Docker selected
 ```
 

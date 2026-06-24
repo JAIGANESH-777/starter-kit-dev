@@ -1399,6 +1399,7 @@ function buildBackendTreeLines(backend, database, auth, infra, language) {
 
   L.push('│   ├── test/');
   L.push('│   ├── .env.example');
+  L.push('│   ├── README.md');
 
   if (language === 'Python') {
     L.push('│   ├── requirements.txt');
@@ -1463,6 +1464,7 @@ function buildFrontendTreeLines(frontend, auth, infra, language) {
     if (isTS) L.push('    ├── types/');
     L.push('    ├── public/');
     L.push('    ├── .env.local.example');
+    L.push('    ├── README.md');
     L.push(`    ├── next.config.${ext}`);
     if (isTS) L.push('    ├── tsconfig.json');
     if (frontend.styling.includes('Tailwind')) L.push(`    ├── tailwind.config.${ext}`);
@@ -1483,6 +1485,7 @@ function buildFrontendTreeLines(frontend, auth, infra, language) {
     L.push('    │   └── styles/');
     L.push('    ├── public/');
     L.push('    ├── .env.example');
+    L.push('    ├── README.md');
     L.push(`    ├── vite.config.${ext}`);
     if (isTS) L.push('    ├── tsconfig.json');
     if (frontend.styling.includes('Tailwind')) L.push(`    ├── tailwind.config.${ext}`);
@@ -1501,6 +1504,7 @@ function buildFrontendTreeLines(frontend, auth, infra, language) {
     L.push('    │   └── css/');
     L.push('    ├── public/');
     L.push('    ├── .env.example');
+    L.push('    ├── README.md');
     L.push(`    ├── nuxt.config.${ext}`);
     if (isTS) L.push('    ├── tsconfig.json');
   } else if (frontend.framework === 'SvelteKit') {
@@ -1523,6 +1527,7 @@ function buildFrontendTreeLines(frontend, auth, infra, language) {
     L.push(`    │           └── +page.server.${ext}`);
     L.push('    ├── static/');
     L.push('    ├── .env.example');
+    L.push('    ├── README.md');
     L.push('    ├── svelte.config.js');
     L.push(`    ├── vite.config.${ext}`);
     if (isTS) L.push('    ├── tsconfig.json');
@@ -1693,9 +1698,9 @@ function buildScaffoldInstructions(answers) {
       : '   _Skipped._',
     '',
     '8. **README.md**',
-    '   - Local setup: clone → install → env setup → migrate → run',
-    '   - All environment variables documented',
-    '   - How to run tests and Docker',
+    '   - Create a root `README.md` with: Local setup (clone → install → env setup → migrate → run), all environment variables documented, and how to run tests/Docker.',
+    '   - Create `backend/README.md` containing: Architecture overview, API/routes structure, local development commands, and testing instructions.',
+    '   - Create `frontend/README.md` containing: Design system overview, component architecture, state management patterns, and build/dev commands.',
     '',
     '### Critical Rules',
     '- Never hardcode secrets — use environment variables exclusively.',

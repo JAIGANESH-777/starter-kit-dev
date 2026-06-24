@@ -45,3 +45,8 @@ Before writing any code, examine the current configurations:
   - Backend: must `EXPOSE 8000`.
 - Generate Terraform deployment templates matching the chosen target cloud (AWS, Azure, GCP).
 - Generate the root `docker-compose.yml` by copying and applying the dynamically compiled Docker service configurations from Section 6 of `SPEC.md`. Ensure all port mappings, dependent services (db, redis, keycloak), and healthchecks match the specification exactly.
+
+### Step 6: Documentation & READMEs
+- Generate a root `README.md` that outlines the full project setup, environment variable requirements, and Docker/testing commands.
+- Generate a `frontend/README.md` that explains the frontend design system, component architecture, state management, and local development commands.
+- Generate a `backend/README.md` that covers the backend architecture, API routes structure, required background services (like Redis/DB), and testing instructions.
